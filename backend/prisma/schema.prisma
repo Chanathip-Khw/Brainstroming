@@ -1,0 +1,68 @@
+# Update prisma/schema.prisma (this creates all our tables)
+@'
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  googleId  String   @unique @map("google_id")
+  email     String   @unique
+  name      String
+  avatarUrl String?  @map("avatar_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  ownedWorkspaces Workspace[] @relation("WorkspaceOwner")
+  canvasElements  CanvasElement[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  ownerId     String   @map("owner_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  owner    User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  projects Project[]
+
+  @@map("workspaces")
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id])
+  canvasElements CanvasElement[]
+
+  @@map("projects")
+}
+
+model CanvasElement {
+  id        String @id @default(cuid())
+  projectId String @map("project_id")
+  type      String
+  content   String?
+  positionX Float  @map("position_x")
+  positionY Float  @map("position_y")
+  createdBy String @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id])
+  creator User    @relation(fields: [createdBy], references: [id])
+
+  @@map("canvas_elements")
+}
+'@ | Out-File -FilePath "prisma\schema.prisma" -Encoding UTF8
