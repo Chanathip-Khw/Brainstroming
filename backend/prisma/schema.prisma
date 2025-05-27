@@ -1,7 +1,13 @@
-# Update prisma/schema.prisma (this creates all our tables)
-@'
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
+}
+
+generator erd {
+  provider = "prisma-erd-generator"
+  output   = "../ERD.svg"
 }
 
 datasource db {
@@ -9,60 +15,378 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  googleId  String   @unique @map("google_id")
-  email     String   @unique
-  name      String
-  avatarUrl String?  @map("avatar_url")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
 
-  ownedWorkspaces Workspace[] @relation("WorkspaceOwner")
-  canvasElements  CanvasElement[]
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum CanvasElementType {
+  TEXT
+  IMAGE
+  SHAPE
+  LINE
+  STICKY_NOTE
+  CONNECTOR
+  GROUP
+  FRAME
+  COMMENT
+  VOTE
+}
+
+enum ConnectionType {
+  LINE
+  ARROW
+  CURVED
+  ORTHOGONAL
+}
+
+enum VoteType {
+  LIKE
+  DISLIKE
+  STAR
+  PRIORITY_LOW
+  PRIORITY_MEDIUM
+  PRIORITY_HIGH
+}
+
+enum SessionStatus {
+  PLANNED
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+enum ActionType {
+  CREATE
+  UPDATE
+  DELETE
+  MOVE
+  RESIZE
+  ROTATE
+  LOCK
+  UNLOCK
+  COMMENT
+  VOTE
+  JOIN
+  LEAVE
+}
+
+model User {
+  id            String    @id @default(cuid())
+  googleId      String    @unique @map("google_id")
+  email         String    @unique
+  name          String
+  avatarUrl     String?   @map("avatar_url")
+  locale        String?   @default("en")
+  emailVerified Boolean   @default(false) @map("email_verified")
+  isActive      Boolean   @default(true) @map("is_active")
+  lastLogin     DateTime  @default(now()) @map("last_login")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  ownedWorkspaces      Workspace[]       @relation("WorkspaceOwner")
+  workspaceMemberships WorkspaceMember[]
+  createdProjects      Project[]         @relation("ProjectCreator")
+  canvasElements       CanvasElement[]
+  comments             Comment[]
+  votes               Vote[]
+  activityLogs        ActivityLog[]
+  sessions            UserSession[]
 
   @@map("users")
+  @@index([googleId])
+  @@index([email])
+  @@index([isActive])
+}
+
+model UserSession {
+  id           String    @id @default(cuid())
+  userId       String    @map("user_id")
+  accessToken  String?   @map("access_token") @db.Text
+  refreshToken String?   @map("refresh_token") @db.Text
+  expiresAt    DateTime? @map("expires_at")
+  userAgent    String?   @map("user_agent") @db.Text
+  ipAddress    String?   @map("ip_address")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+  @@index([userId])
+  @@index([isActive])
 }
 
 model Workspace {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  ownerId     String   @map("owner_id")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id          String    @id @default(cuid())
+  name        String    @db.VarChar(255)
+  description String?   @db.Text
+  ownerId     String    @map("owner_id")
+  settings    Json?
+  isPublic    Boolean   @default(false) @map("is_public")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  owner    User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
-  projects Project[]
+  // Relations
+  owner        User             @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members      WorkspaceMember[]
+  projects     Project[]
+  invitations  WorkspaceInvite[]
+  activityLogs ActivityLog[]
 
   @@map("workspaces")
+  @@index([ownerId])
+  @@index([isActive])
+  @@index([isPublic])
+}
+
+model WorkspaceMember {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  userId      String   @map("user_id")
+  role        Role     @default(MEMBER)
+  permissions Json?
+  isActive    Boolean  @default(true) @map("is_active")
+  joinedAt    DateTime @default(now()) @map("joined_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@map("workspace_members")
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([isActive])
+}
+
+model WorkspaceInvite {
+  id          String       @id @default(cuid())
+  workspaceId String       @map("workspace_id")
+  email       String
+  role        Role         @default(MEMBER)
+  token       String       @unique
+  status      InviteStatus @default(PENDING)
+  invitedBy   String       @map("invited_by")
+  expiresAt   DateTime     @map("expires_at")
+  acceptedAt  DateTime?    @map("accepted_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("workspace_invites")
+  @@index([email])
+  @@index([token])
+  @@index([status])
+  @@index([expiresAt])
 }
 
 model Project {
-  id          String   @id @default(cuid())
-  workspaceId String   @map("workspace_id")
-  name        String
-  description String?
-  createdAt   DateTime @default(now()) @map("created_at")
+  id          String    @id @default(cuid())
+  workspaceId String    @map("workspace_id")
+  name        String    @db.VarChar(255)
+  description String?   @db.Text
+  canvasData  Json?     @map("canvas_data")
+  thumbnail   String?   @db.Text
+  isTemplate  Boolean   @default(false) @map("is_template")
+  isPublic    Boolean   @default(false) @map("is_public")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdBy   String    @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  workspace      Workspace       @relation(fields: [workspaceId], references: [id])
+  // Relations
+  workspace      Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator        User             @relation("ProjectCreator", fields: [createdBy], references: [id])
   canvasElements CanvasElement[]
+  categories     Category[]
+  sessions       BrainstormSession[]
 
   @@map("projects")
+  @@index([workspaceId])
+  @@index([createdBy])
+  @@index([isActive])
+  @@index([isTemplate])
+  @@index([isPublic])
+}
+
+model BrainstormSession {
+  id          String        @id @default(cuid())
+  projectId   String        @map("project_id")
+  name        String        @db.VarChar(255)
+  description String?       @db.Text
+  status      SessionStatus @default(ACTIVE)
+  startTime   DateTime?     @map("start_time")
+  endTime     DateTime?     @map("end_time")
+  duration    Int?
+  settings    Json?
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("brainstorm_sessions")
+  @@index([projectId])
+  @@index([status])
 }
 
 model CanvasElement {
-  id        String @id @default(cuid())
-  projectId String @map("project_id")
-  type      String
-  content   String?
-  positionX Float  @map("position_x")
-  positionY Float  @map("position_y")
-  createdBy String @map("created_by")
-  createdAt DateTime @default(now()) @map("created_at")
+  id        String            @id @default(cuid())
+  projectId String            @map("project_id")
+  type      CanvasElementType
+  content   String?           @db.Text
+  positionX Decimal          @map("position_x") @db.Decimal(10, 2)
+  positionY Decimal          @map("position_y") @db.Decimal(10, 2)
+  width     Decimal?         @db.Decimal(10, 2)
+  height    Decimal?         @db.Decimal(10, 2)
+  rotation  Decimal?         @db.Decimal(5, 2) @default(0)
+  zIndex    Int              @default(0) @map("z_index")
+  styleData Json?            @map("style_data")
+  locked    Boolean          @default(false)
+  version   Int              @default(1)
+  createdBy String           @map("created_by")
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
 
-  project Project @relation(fields: [projectId], references: [id])
-  creator User    @relation(fields: [createdBy], references: [id])
+  // Relations
+  project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator    User               @relation(fields: [createdBy], references: [id])
+  comments   Comment[]
+  votes      Vote[]
+  categories ElementCategory[]
+  connections ElementConnection[] @relation("SourceElement")
+  connectedFrom ElementConnection[] @relation("TargetElement")
 
   @@map("canvas_elements")
+  @@index([projectId])
+  @@index([createdBy])
+  @@index([type])
+  @@index([zIndex])
 }
-'@ | Out-File -FilePath "prisma\schema.prisma" -Encoding UTF8
+
+model ElementConnection {
+  id              String         @id @default(cuid())
+  sourceElementId String         @map("source_element_id")
+  targetElementId String         @map("target_element_id")
+  type            ConnectionType @default(LINE)
+  styleData       Json?          @map("style_data")
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  // Relations
+  sourceElement CanvasElement @relation("SourceElement", fields: [sourceElementId], references: [id], onDelete: Cascade)
+  targetElement CanvasElement @relation("TargetElement", fields: [targetElementId], references: [id], onDelete: Cascade)
+
+  @@map("element_connections")
+  @@index([sourceElementId])
+  @@index([targetElementId])
+}
+
+model Comment {
+  id          String   @id @default(cuid())
+  elementId   String   @map("element_id")
+  userId      String   @map("user_id")
+  content     String   @db.Text
+  isResolved  Boolean  @default(false) @map("is_resolved")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  element     CanvasElement @relation(fields: [elementId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id])
+
+  @@map("comments")
+  @@index([elementId])
+  @@index([userId])
+  @@index([isResolved])
+}
+
+model Vote {
+  id        String    @id @default(cuid())
+  elementId String    @map("element_id")
+  userId    String    @map("user_id")
+  type      VoteType
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  element   CanvasElement @relation(fields: [elementId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id])
+
+  @@unique([elementId, userId])
+  @@map("votes")
+  @@index([elementId])
+  @@index([userId])
+  @@index([type])
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  projectId   String    @map("project_id")
+  name        String    @db.VarChar(255)
+  color       String?   @db.VarChar(7)
+  description String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  project   Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  elements  ElementCategory[]
+
+  @@map("categories")
+  @@index([projectId])
+}
+
+model ElementCategory {
+  elementId  String    @map("element_id")
+  categoryId String    @map("category_id")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  element   CanvasElement @relation(fields: [elementId], references: [id], onDelete: Cascade)
+  category  Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([elementId, categoryId])
+  @@map("element_categories")
+  @@index([elementId])
+  @@index([categoryId])
+}
+
+model ActivityLog {
+  id          String     @id @default(cuid())
+  workspaceId String     @map("workspace_id")
+  userId      String     @map("user_id")
+  action      ActionType
+  entityType  String     @map("entity_type")
+  entityId    String     @map("entity_id")
+  metadata    Json?
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  // Relations
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@map("activity_logs")
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([action])
+  @@index([entityType])
+  @@index([entityId])
+  @@index([createdAt])
+}
