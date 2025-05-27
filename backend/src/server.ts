@@ -22,6 +22,13 @@ declare module 'fastify' {
       name: string
     }
   }
+
+  interface FastifyInstance {
+    googleOAuth2: {
+      generateAuthorizationUri: (request: any) => string
+      getAccessTokenFromAuthorizationCodeFlow: (request: any) => Promise<{ token: any }>
+    }
+  }
 }
 
 const prisma = new PrismaClient()
@@ -81,55 +88,150 @@ async function registerRoutes() {
   // AUTHENTICATION ROUTES
   // ================================
 
-  // Google OAuth callback
-  fastify.get('/auth/google/callback', async (request, reply) => {
+  // Create a separate instance for the callback route with its own OAuth2 plugin
+  const callbackHandler = async (request, reply) => {
     try {
-      const { token } = await reply.googleOAuth2.getAccessTokenFromAuthorizationCodeFlow(request)
+      console.log('=== OAUTH CALLBACK START ===')
+      console.log('Request query:', request.query)
       
-      // Get user info from Google
+      // Use fastify.googleOAuth2 instead of reply.googleOAuth2
+      const result = await fastify.googleOAuth2.getAccessTokenFromAuthorizationCodeFlow(request)
+      console.log('✅ Access token received')
+      
+      if (!result.token || !result.token.access_token) {
+        throw new Error('No access token received from Google')
+      }
+      
+      // Step 2: Get user info from Google
+      console.log('Step 2: Fetching user info from Google...')
       const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-        headers: { Authorization: `Bearer ${token.access_token}` }
+        headers: { Authorization: `Bearer ${result.token.access_token}` }
       })
       
+      console.log('Google API response status:', userInfoResponse.status)
+      
       if (!userInfoResponse.ok) {
-        throw new Error('Failed to fetch user info from Google')
+        const errorText = await userInfoResponse.text()
+        console.error('Google API error response:', errorText)
+        throw new Error(`Google API returned ${userInfoResponse.status}: ${errorText}`)
       }
       
       const googleUser = await userInfoResponse.json()
+      console.log('✅ Google user data received:', {
+        id: googleUser.id,
+        email: googleUser.email,
+        name: googleUser.name,
+        picture: !!googleUser.picture
+      })
       
-      // Create or update user in database
+      // Step 3: Test database connection
+      console.log('Step 3: Testing database connection...')
+      await prisma.$connect()
+      console.log('✅ Database connected')
+      
+      // Step 4: Create/update user
+      console.log('Step 4: Creating/updating user...')
       const user = await authService.createOrUpdateGoogleUser({
         id: googleUser.id,
         email: googleUser.email,
         name: googleUser.name,
         picture: googleUser.picture
       })
-      
-      // Generate JWT token
-      const jwtToken = authService.generateToken(user)
-      
-      // Create session
-      const userAgent = request.headers['user-agent']
-      const ipAddress = request.ip
-      await authService.createSession(user.id, jwtToken, userAgent, ipAddress)
-      
-      // Log activity
-      await authService.logActivity(user.id, 'USER_LOGIN', {
-        method: 'google_oauth',
-        userAgent,
-        ipAddress
+      console.log('✅ User created/updated:', {
+        id: user.id,
+        email: user.email,
+        name: user.name
       })
       
-      // Redirect to frontend with token
-      const frontendUrl = `${process.env.FRONTEND_URL}/auth/callback?token=${jwtToken}`
-      return reply.redirect(frontendUrl)
+      // Step 5: Generate JWT
+      console.log('Step 5: Generating JWT token...')
+      const jwtToken = authService.generateToken(user)
+      console.log('✅ JWT token generated')
+      
+      console.log('=== OAUTH CALLBACK SUCCESS ===')
+      
+      // Return success page
+      return reply.type('text/html').send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>🎉 Authentication Success</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+            .success { color: #16a34a; }
+            .token-box { background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0; }
+            textarea { width: 100%; height: 100px; font-family: monospace; font-size: 12px; }
+            pre { background: #f3f4f6; padding: 15px; border-radius: 8px; overflow-x: auto; }
+          </style>
+        </head>
+        <body>
+          <h1>🎉 <span class="success">Authentication Successful!</span></h1>
+          
+          <h2>User Information:</h2>
+          <pre>${JSON.stringify(user, null, 2)}</pre>
+          
+          <h2>JWT Token:</h2>
+          <div class="token-box">
+            <textarea readonly>${jwtToken}</textarea>
+          </div>
+          
+          <h2>✅ Next Steps:</h2>
+          <ul>
+            <li>✅ User created in database</li>
+            <li>✅ JWT token generated</li>
+            <li>🔄 Check Prisma Studio: <a href="http://localhost:5555" target="_blank">http://localhost:5555</a></li>
+            <li>🚀 Ready to build frontend!</li>
+          </ul>
+          
+          <h3>Test API with this token:</h3>
+          <code style="background: #f3f4f6; padding: 10px; display: block; margin: 10px 0;">
+            curl -H "Authorization: Bearer ${jwtToken}" http://localhost:3001/api/auth/me
+          </code>
+        </body>
+        </html>
+      `)
       
     } catch (error) {
-      fastify.log.error('OAuth callback error:', error)
-      const errorUrl = `${process.env.FRONTEND_URL}/auth/error?message=Authentication failed`
-      return reply.redirect(errorUrl)
+      console.error('=== OAUTH CALLBACK ERROR ===')
+      console.error('Error type:', error.constructor.name)
+      console.error('Error message:', error.message)
+      console.error('Error stack:', error.stack)
+      
+      return reply.type('text/html').send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>❌ Authentication Error</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+            .error { color: #dc2626; }
+            .error-box { background: #fef2f2; border: 1px solid #fecaca; padding: 20px; border-radius: 8px; }
+          </style>
+        </head>
+        <body>
+          <h1>❌ <span class="error">Authentication Error</span></h1>
+          
+          <div class="error-box">
+            <h3>Error Details:</h3>
+            <p><strong>Type:</strong> ${error.constructor.name}</p>
+            <p><strong>Message:</strong> ${error.message}</p>
+          </div>
+          
+          <h3>🔧 Check these things:</h3>
+          <ul>
+            <li>Google OAuth credentials in .env file</li>
+            <li>Database connection (DATABASE_URL)</li>
+            <li>Run: npx prisma generate</li>
+            <li>Backend console logs</li>
+          </ul>
+        </body>
+        </html>
+      `)
     }
-  })
+  }
+
+  // Register the callback route
+  fastify.get('/auth/google/callback', callbackHandler)
 
   // Get current user (protected route)
   fastify.get('/api/auth/me', { preHandler: authenticateToken }, async (request) => {
@@ -314,7 +416,13 @@ const gracefulShutdown = async (signal: string) => {
 // Start server
 async function start() {
   try {
+    // Register plugins first
     await registerPlugins()
+    
+    // Wait a moment to ensure plugins are fully registered
+    await new Promise(resolve => setTimeout(resolve, 100))
+    
+    // Then register routes
     await registerRoutes()
     
     const port = parseInt(process.env.PORT || '3001')

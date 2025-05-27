@@ -1,6 +1,16 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
 import { authService } from '../services/authService'
 
+declare module 'fastify' {
+  interface FastifyRequest {
+    currentUser?: {
+      userId: string
+      email: string
+      name: string
+    }
+  }
+}
+
 export async function authenticateToken(request: FastifyRequest, reply: FastifyReply) {
   try {
     const authHeader = request.headers.authorization
