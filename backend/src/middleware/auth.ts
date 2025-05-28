@@ -1,17 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
 import { authService } from '../services/authService'
 import jwt from 'jsonwebtoken'
-
-declare module 'fastify' {
-  interface FastifyRequest {
-    currentUser?: {
-      userId: string
-      email: string
-      name: string
-      tokenSource?: 'backend' | 'nextauth'
-    }
-  }
-}
+import { AuthenticatedRequest } from '../types'
 
 export async function authenticateToken(request: FastifyRequest, reply: FastifyReply) {
   try {
@@ -25,57 +15,55 @@ export async function authenticateToken(request: FastifyRequest, reply: FastifyR
       })
     }
 
-    // First try to verify as a backend token
+    // First try to verify as a NextAuth token
     try {
-      const decoded = authService.verifyToken(token)
-      const user = await authService.getUserById(decoded.userId)
-
+      // Attempt to decode the NextAuth JWT
+      const decoded = jwt.decode(token) as any
+      
+      if (!decoded || !decoded.email) {
+        throw new Error('Invalid NextAuth token')
+      }
+      
+      // Find user by email (from NextAuth token)
+      const user = await authService.getUserByEmail(decoded.email)
+      
       if (!user) {
         return reply.code(401).send({ 
           error: 'User not found',
-          message: 'The user associated with this token no longer exists'
+          message: 'The user associated with this token does not exist in our system'
         })
       }
-
-      request.currentUser = {
+      
+      (request as AuthenticatedRequest).currentUser = {
         userId: user.id,
         email: user.email,
         name: user.name,
-        tokenSource: 'backend'
+        tokenSource: 'nextauth'
       }
       
-      return // Successfully authenticated with backend token
-    } catch (backendError) {
-      // If backend token verification fails, try NextAuth token
+      return // Successfully authenticated with NextAuth token
+    } catch (nextAuthError) {
+      // If NextAuth token verification fails, try backend token
       try {
-        // Attempt to decode the NextAuth JWT
-        // Note: This is a simplified approach. In production, you should use the same
-        // secret that NextAuth uses or implement proper JWT verification
-        const decoded = jwt.decode(token) as any
-        
-        if (!decoded || !decoded.email) {
-          throw new Error('Invalid NextAuth token')
-        }
-        
-        // Find user by email (from NextAuth token)
-        const user = await authService.getUserByEmail(decoded.email)
-        
+        const decoded = authService.verifyToken(token)
+        const user = await authService.getUserById(decoded.userId)
+
         if (!user) {
           return reply.code(401).send({ 
             error: 'User not found',
-            message: 'The user associated with this token does not exist in our system'
+            message: 'The user associated with this token no longer exists'
           })
         }
-        
-        request.currentUser = {
+
+        (request as AuthenticatedRequest).currentUser = {
           userId: user.id,
           email: user.email,
           name: user.name,
-          tokenSource: 'nextauth'
+          tokenSource: 'backend'
         }
         
-        return // Successfully authenticated with NextAuth token
-      } catch (nextAuthError) {
+        return // Successfully authenticated with backend token
+      } catch (backendError) {
         // Both token verification methods failed
         return reply.code(403).send({ 
           error: 'Invalid token',
@@ -97,38 +85,38 @@ export async function optionalAuth(request: FastifyRequest, reply: FastifyReply)
     const token = authHeader && authHeader.split(' ')[1]
 
     if (token) {
-      // Try backend token first
+      // Try NextAuth token first
       try {
-        const decoded = authService.verifyToken(token)
-        const user = await authService.getUserById(decoded.userId)
+        const decoded = jwt.decode(token) as any
         
-        if (user) {
-          request.currentUser = {
-            userId: user.id,
-            email: user.email,
-            name: user.name,
-            tokenSource: 'backend'
-          }
-          return
-        }
-      } catch (backendError) {
-        // Try NextAuth token
-        try {
-          const decoded = jwt.decode(token) as any
+        if (decoded && decoded.email) {
+          const user = await authService.getUserByEmail(decoded.email)
           
-          if (decoded && decoded.email) {
-            const user = await authService.getUserByEmail(decoded.email)
-            
-            if (user) {
-              request.currentUser = {
-                userId: user.id,
-                email: user.email,
-                name: user.name,
-                tokenSource: 'nextauth'
-              }
+          if (user) {
+            (request as AuthenticatedRequest).currentUser = {
+              userId: user.id,
+              email: user.email,
+              name: user.name,
+              tokenSource: 'nextauth'
+            }
+            return
+          }
+        }
+      } catch (nextAuthError) {
+        // Try backend token
+        try {
+          const decoded = authService.verifyToken(token)
+          const user = await authService.getUserById(decoded.userId)
+          
+          if (user) {
+            (request as AuthenticatedRequest).currentUser = {
+              userId: user.id,
+              email: user.email,
+              name: user.name,
+              tokenSource: 'backend'
             }
           }
-        } catch (nextAuthError) {
+        } catch (backendError) {
           // Optional auth - continue without user
         }
       }
