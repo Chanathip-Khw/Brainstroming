@@ -56,6 +56,7 @@ export const workspaceController = {
         return reply.code(400).send({ error: 'Workspace name is required' })
       }
 
+      // Create the workspace
       const workspace = await prisma.workspace.create({
         data: {
           name: name.trim(),
@@ -85,11 +86,16 @@ export const workspaceController = {
         }
       })
 
-      // Log activity
-      await authService.logActivity(request.currentUser!.userId, 'WORKSPACE_CREATE', {
-        workspaceId: workspace.id,
-        workspaceName: workspace.name
-      })
+      // Log activity with the new workspace ID
+      await authService.logActivity(
+        request.currentUser!.userId, 
+        'WORKSPACE_CREATE', 
+        {
+          workspaceId: workspace.id,
+          workspaceName: workspace.name
+        },
+        workspace.id // Pass the workspace ID explicitly
+      )
 
       return { workspace }
     } catch (error) {
