@@ -10,6 +10,7 @@ declare module 'next-auth' {
       name?: string | null
       email?: string | null
       image?: string | null
+      backendId?: string
     }
   }
 }
@@ -33,6 +34,36 @@ export const authOptions: NextAuthOptions = {
         token.accessToken = account.access_token
         token.refreshToken = account.refresh_token
         token.googleId = account.providerAccountId
+        
+        // Sync with backend
+        if (account.access_token) {
+          try {
+            // Call your backend to register/update the user
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/auth/sync`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                googleId: account.providerAccountId,
+                email: user.email,
+                name: user.name,
+                picture: user.image
+              })
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              // Store backend user ID if provided
+              if (data.userId) {
+                token.backendId = data.userId;
+              }
+            }
+          } catch (error) {
+            console.error('Error syncing with backend:', error);
+            // Continue even if backend sync fails
+          }
+        }
       }
       return token
     },
@@ -41,6 +72,10 @@ export const authOptions: NextAuthOptions = {
       session.accessToken = token.accessToken as string
       session.user.googleId = token.googleId as string
       session.user.id = token.sub as string
+      // Include backend ID if available
+      if (token.backendId) {
+        session.user.backendId = token.backendId as string
+      }
       return session
     },
     async redirect({ url, baseUrl }) {

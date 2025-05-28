@@ -20,6 +20,7 @@ declare module 'fastify' {
       userId: string
       email: string
       name: string
+      tokenSource?: 'backend' | 'nextauth'
     }
   }
 
@@ -264,6 +265,37 @@ async function registerRoutes() {
       return { error: 'Logout failed' }
     }
   })
+
+  // API endpoint for NextAuth to sync users with backend
+  fastify.post('/api/auth/sync', async (request, reply) => {
+    try {
+      const { googleId, email, name, picture } = request.body as any;
+      
+      if (!googleId || !email) {
+        return reply.code(400).send({ error: 'Missing required fields' });
+      }
+      
+      // Use existing authService to create/update user
+      const user = await authService.createOrUpdateGoogleUser({
+        id: googleId,
+        email,
+        name,
+        picture
+      });
+      
+      // Log activity
+      await authService.logActivity(user.id, 'AUTH_SYNC');
+      
+      return {
+        success: true,
+        userId: user.id,
+        message: 'User synchronized successfully'
+      };
+    } catch (error) {
+      console.error('Error syncing user:', error);
+      return reply.code(500).send({ error: 'Failed to sync user' });
+    }
+  });
 
   // ================================
   // API ROUTES (Protected)

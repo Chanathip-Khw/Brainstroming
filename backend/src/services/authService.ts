@@ -104,6 +104,29 @@ export class AuthService {
     }
   }
 
+  // Get user by email
+  async getUserByEmail(email: string): Promise<AuthUser | null> {
+    try {
+      const user = await prisma.user.findFirst({
+        where: { email, isActive: true },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          avatarUrl: true,
+          createdAt: true
+        }
+      });
+
+      return user ? {
+        ...user,
+        avatarUrl: user.avatarUrl ?? undefined
+      } : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
   // Create user session
   async createSession(userId: string, token: string, userAgent?: string, ipAddress?: string) {
     try {
