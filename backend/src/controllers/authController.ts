@@ -21,12 +21,16 @@ export const authController = {
   // Logout user
   logout: async (request: AuthenticatedRequest, reply: FastifyReply) => {
     try {
-      // Get the current session token
-      const authHeader = request.headers.authorization;
-      const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+      console.log('Logout request received:', {
+        userId: request.currentUser?.userId,
+        headers: request.headers,
+      });
+      
+      const token = request.headers.authorization?.replace('Bearer ', '');
       
       if (!token) {
-        return reply.code(400).send({ error: 'No active session found' });
+        console.log('No token provided in logout request');
+        return reply.code(400).send({ error: 'No token provided' });
       }
       
       // Find the specific session to log out
@@ -38,6 +42,12 @@ export const authController = {
         }
       });
       
+      console.log('Session found for logout:', session ? { 
+        id: session.id, 
+        userId: session.userId,
+        isActive: session.isActive
+      } : 'No active session found');
+      
       if (session) {
         // Mark only this specific session as inactive
         await prisma.userSession.update({
@@ -45,25 +55,40 @@ export const authController = {
           data: { isActive: false }
         });
         
-        // Log logout activity with session details
-        await authService.logActivity(request.currentUser!.userId, 'USER_LOGOUT', {
-          sessionId: session.id,
-          logoutTime: new Date().toISOString(),
-          sessionDuration: session.createdAt 
-            ? Math.floor((Date.now() - session.createdAt.getTime()) / 1000) // Duration in seconds
-            : null
-        });
+        console.log(`Session ${session.id} marked as inactive`);
       } else {
         // If specific session not found, log out all sessions (fallback)
-        await prisma.userSession.updateMany({
+        const result = await prisma.userSession.updateMany({
           where: { userId: request.currentUser!.userId, isActive: true },
           data: { isActive: false }
         });
         
-        // Log a general logout
-        await authService.logActivity(request.currentUser!.userId, 'USER_LOGOUT_ALL', {
-          logoutTime: new Date().toISOString(),
-          reason: 'Session not found, all sessions terminated'
+        console.log(`All sessions for user ${request.currentUser!.userId} marked as inactive:`, result);
+      }
+      
+      // Check if this was the last active session for this user
+      const activeSessionsCount = await prisma.userSession.count({
+        where: {
+          userId: request.currentUser!.userId,
+          isActive: true
+        }
+      });
+      
+      console.log(`Active sessions remaining for user ${request.currentUser!.userId}:`, activeSessionsCount);
+      
+      // If no active sessions remain, update the user's status to inactive
+      if (activeSessionsCount === 0) {
+        const userUpdateResult = await prisma.user.update({
+          where: { id: request.currentUser!.userId },
+          data: { 
+            isActive: false, // Set user to inactive when they have no active sessions
+            lastLogin: new Date() // Update last login time to track when they logged out
+          }
+        });
+        
+        console.log(`User ${request.currentUser!.userId} marked as inactive:`, {
+          isActive: userUpdateResult.isActive,
+          lastLogin: userUpdateResult.lastLogin
         });
       }
       
@@ -181,6 +206,8 @@ export const authController = {
     try {
       const { sessionId } = request.params as { sessionId: string };
       
+      console.log(`Session termination request for session ${sessionId} by user ${request.currentUser!.userId}`);
+      
       // Check if session exists and belongs to user
       const session = await prisma.userSession.findFirst({
         where: {
@@ -190,8 +217,15 @@ export const authController = {
       });
       
       if (!session) {
+        console.log(`Session ${sessionId} not found for user ${request.currentUser!.userId}`);
         return reply.code(404).send({ error: 'Session not found' });
       }
+      
+      console.log(`Found session ${sessionId} for termination:`, {
+        userId: session.userId,
+        isActive: session.isActive,
+        createdAt: session.createdAt
+      });
       
       // Terminate the session
       await prisma.userSession.update({
@@ -199,11 +233,33 @@ export const authController = {
         data: { isActive: false }
       });
       
-      // Log session termination
-      await authService.logActivity(request.currentUser!.userId, 'SESSION_TERMINATED', {
-        sessionId,
-        terminationTime: new Date().toISOString()
+      console.log(`Session ${sessionId} marked as inactive`);
+      
+      // Check if this was the last active session for this user
+      const activeSessionsCount = await prisma.userSession.count({
+        where: {
+          userId: request.currentUser!.userId,
+          isActive: true
+        }
       });
+      
+      console.log(`Active sessions remaining for user ${request.currentUser!.userId}:`, activeSessionsCount);
+      
+      // If no active sessions remain, update the user's status to inactive
+      if (activeSessionsCount === 0) {
+        const userUpdateResult = await prisma.user.update({
+          where: { id: request.currentUser!.userId },
+          data: { 
+            isActive: false, // Set user to inactive when they have no active sessions
+            lastLogin: new Date() // Update last login time to track when they logged out
+          }
+        });
+        
+        console.log(`User ${request.currentUser!.userId} marked as inactive:`, {
+          isActive: userUpdateResult.isActive,
+          lastLogin: userUpdateResult.lastLogin
+        });
+      }
       
       return { success: true, message: 'Session terminated successfully' };
     } catch (error) {

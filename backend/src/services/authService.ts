@@ -48,7 +48,8 @@ export class AuthService {
           name: googleUser.name,
           avatarUrl: googleUser.picture,
           lastLogin: new Date(),
-          emailVerified: true
+          emailVerified: true,
+          isActive: true
         },
         create: {
           googleId: googleUser.id,
@@ -221,7 +222,7 @@ export class AuthService {
   async getUserById(userId: string): Promise<AuthUser | null> {
     try {
       const user = await prisma.user.findUnique({
-        where: { id: userId, isActive: true },
+        where: { id: userId },
         select: {
           id: true,
           email: true,
@@ -244,7 +245,7 @@ export class AuthService {
   async getUserByEmail(email: string): Promise<AuthUser | null> {
     try {
       const user = await prisma.user.findFirst({
-        where: { email, isActive: true },
+        where: { email },
         select: {
           id: true,
           email: true,
@@ -279,6 +280,15 @@ export class AuthService {
       // Get device information from user agent
       const deviceInfo = this.parseUserAgent(userAgent || '');
       
+      // Update the user's lastLogin timestamp and ensure user is active
+      await prisma.user.update({
+        where: { id: userId },
+        data: { 
+          lastLogin: new Date(),
+          isActive: true // Ensure user is active when creating a session
+        }
+      });
+      
       // Create new session
       const session = await prisma.userSession.create({
         data: {
@@ -290,16 +300,6 @@ export class AuthService {
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
           isActive: true
         }
-      });
-      
-      // Log login activity with detailed metadata
-      await this.logActivity(userId, 'USER_LOGIN', {
-        sessionId: session.id,
-        ipAddress,
-        device: deviceInfo.device,
-        browser: deviceInfo.browser,
-        os: deviceInfo.os,
-        loginTime: new Date().toISOString()
       });
       
       return session;
@@ -356,7 +356,13 @@ export class AuthService {
   // Log activity
   async logActivity(userId: string, action: string, metadata?: any, workspaceId?: string) {
     try {
-      // If workspaceId is provided, use it directly
+      // Skip logging for login/logout/auth related actions - we're using the User table for login tracking
+      if (['USER_LOGIN', 'USER_LOGOUT', 'USER_LOGOUT_ALL', 'TOKEN_REFRESH'].includes(action)) {
+        console.log(`Auth activity skipped (using User.lastLogin instead): ${action} for user ${userId}`);
+        return;
+      }
+      
+      // Only log workspace-related actions when a workspaceId is provided
       if (workspaceId) {
         await prisma.activityLog.create({
           data: {
@@ -367,58 +373,14 @@ export class AuthService {
             action: action as any,
             metadata
           }
-        })
+        });
         return;
       }
       
-      // Try to find user's default workspace
-      const workspace = await prisma.workspace.findFirst({
-        where: { ownerId: userId }
-      })
-
-      // If workspace exists, log activity to it
-      if (workspace) {
-        await prisma.activityLog.create({
-          data: {
-            workspaceId: workspace.id,
-            userId,
-            entityType: 'WORKSPACE',
-            entityId: workspace.id,
-            action: action as any,
-            metadata
-          }
-        })
-      } else {
-        // If no workspace exists, find or create a system workspace for logging
-        let systemWorkspace = await prisma.workspace.findFirst({
-          where: { name: 'System Workspace' }
-        })
-        
-        if (!systemWorkspace) {
-          systemWorkspace = await prisma.workspace.create({
-            data: {
-              name: 'System Workspace',
-              description: 'System workspace for logging activities',
-              ownerId: userId, // Use the current user as owner
-              isActive: true
-            }
-          })
-        }
-        
-        // Log to the system workspace
-        await prisma.activityLog.create({
-          data: {
-            workspaceId: systemWorkspace.id,
-            userId,
-            entityType: 'USER',
-            entityId: userId,
-            action: action as any,
-            metadata
-          }
-        })
-      }
+      // Skip activity logging when no workspace exists or for non-workspace actions
+      console.log(`Activity logging skipped (no workspace or non-workspace action): ${action} for user ${userId}`);
     } catch (error) {
-      console.error('Failed to log activity:', error)
+      console.error('Failed to log activity:', error);
     }
   }
 }
