@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Users, Plus, Zap, MoreHorizontal } from 'lucide-react';
+import { Users, Plus, Zap, MoreHorizontal, Mail, Settings } from 'lucide-react';
 import { CreateTeamModal } from '../components/teams/CreateTeamModal';
+import { TeamSettingsModal } from '../components/teams/TeamSettingsModal';
 import { CreateBoardModal } from '../components/boards/CreateBoardModal';
 import { BoardOptionsModal } from '../components/boards/BoardOptionsModal';
 import { Team, Board } from '../types';
@@ -23,6 +24,7 @@ export default function DashboardPage() {
 
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingInvites, setPendingInvites] = useState<number>(0);
 
   // Fetch user's workspaces
   useEffect(() => {
@@ -57,12 +59,29 @@ export default function DashboardPage() {
         console.error("Error fetching workspaces:", err);
         setLoading(false);
       });
+
+      // Fetch pending invites
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/workspaces/invites`, {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.invites) {
+          setPendingInvites(data.invites.length);
+        }
+      })
+      .catch(err => {
+        console.error("Error fetching invites:", err);
+      });
     }
   }, [status, session]);
 
   const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
   const [showCreateBoardModal, setShowCreateBoardModal] = useState(false);
   const [showBoardOptionsModal, setShowBoardOptionsModal] = useState(false);
+  const [showTeamSettingsModal, setShowTeamSettingsModal] = useState(false);
   const [selectedBoard, setSelectedBoard] = useState<Board | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
 
@@ -99,6 +118,23 @@ export default function DashboardPage() {
           boards: []
         };
         setTeams([...teams, newTeam]);
+        
+        // Send invites if there are any emails
+        if (inviteEmails.length > 0) {
+          const invites = inviteEmails.map(email => ({ email }));
+          
+          await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/workspaces/invites`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.accessToken}`
+            },
+            body: JSON.stringify({
+              workspaceId: data.workspace.id,
+              invites
+            })
+          });
+        }
       }
     } catch (error) {
       console.error('Error creating workspace:', error);
@@ -165,6 +201,49 @@ export default function DashboardPage() {
     router.push(`/board/${boardId}`);
   };
 
+  const handleTeamSettings = (teamId: string) => {
+    setSelectedTeamId(teamId);
+    setShowTeamSettingsModal(true);
+  };
+
+  const handleTeamUpdated = () => {
+    // Refresh teams after update
+    if (status === 'authenticated' && session?.accessToken) {
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/workspaces`, {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.workspaces) {
+          const mappedTeams = data.workspaces.map((workspace: any) => ({
+            id: workspace.id,
+            name: workspace.name,
+            members: [
+              { 
+                id: workspace.owner.id, 
+                name: workspace.owner.name, 
+                email: workspace.owner.email, 
+                avatar: workspace.owner.avatarUrl || '/api/placeholder/40/40' 
+              }
+            ],
+            boards: [] // You might want to fetch boards separately or include them in the workspace response
+          }));
+          setTeams(mappedTeams);
+        }
+      })
+      .catch(err => {
+        console.error("Error fetching workspaces:", err);
+      });
+    }
+  };
+
+  const handleTeamDeleted = () => {
+    // Remove the deleted team from state
+    setTeams(teams.filter(team => team.id !== selectedTeamId));
+  };
+
   if (status === 'loading' || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -185,6 +264,19 @@ export default function DashboardPage() {
           </div>
           
           <div className="flex items-center gap-4">
+            {pendingInvites > 0 && (
+              <button
+                onClick={() => router.push('/invites')}
+                className="relative bg-white text-indigo-600 px-4 py-2 rounded-lg border border-indigo-200 hover:bg-indigo-50 transition-colors flex items-center gap-2"
+              >
+                <Mail className="w-4 h-4" />
+                Invitations
+                <span className="absolute -top-2 -right-2 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">
+                  {pendingInvites}
+                </span>
+              </button>
+            )}
+            
             <button
               onClick={() => setShowCreateTeamModal(true)}
               className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition-colors"
@@ -241,6 +333,13 @@ export default function DashboardPage() {
                   </div>
                   
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleTeamSettings(team.id)}
+                      className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
+                    >
+                      <Settings className="w-5 h-5" />
+                    </button>
+                    
                     {team.members.slice(0, 3).map((member) => (
                       <img key={member.id} src={member.avatar} alt={member.name} className="w-8 h-8 rounded-full border-2 border-white" />
                     ))}
@@ -294,6 +393,14 @@ export default function DashboardPage() {
           isOpen={showCreateTeamModal}
           onClose={() => setShowCreateTeamModal(false)}
           onCreateTeam={handleCreateTeam}
+        />
+
+        <TeamSettingsModal
+          isOpen={showTeamSettingsModal}
+          onClose={() => setShowTeamSettingsModal(false)}
+          teamId={selectedTeamId}
+          onTeamUpdated={handleTeamUpdated}
+          onTeamDeleted={handleTeamDeleted}
         />
 
         <CreateBoardModal
