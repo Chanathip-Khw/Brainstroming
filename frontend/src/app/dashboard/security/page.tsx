@@ -46,7 +46,15 @@ export default function SecurityPage() {
           
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3">
-              <img src={session?.user?.image || '/api/placeholder/40/40'} alt={session?.user?.name || 'User'} className="w-8 h-8 rounded-full" />
+              <img 
+                src={session?.user?.image || '/api/placeholder/40/40'} 
+                alt={session?.user?.name || 'User'} 
+                className="w-8 h-8 rounded-full"
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  e.currentTarget.src = '/api/placeholder/40/40';
+                }}
+              />
               <span className="text-sm font-medium text-gray-700">{session?.user?.name}</span>
               <LogoutButton variant="text" className="text-gray-400 hover:text-gray-600" />
             </div>

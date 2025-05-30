@@ -286,7 +286,15 @@ export default function DashboardPage() {
             </button>
             
             <div className="flex items-center gap-3">
-              <img src={session?.user?.image || '/api/placeholder/40/40'} alt={session?.user?.name || 'User'} className="w-8 h-8 rounded-full" />
+              <img 
+                src={session?.user?.image || '/api/placeholder/40/40'} 
+                alt={session?.user?.name || 'User'} 
+                className="w-8 h-8 rounded-full"
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  e.currentTarget.src = '/api/placeholder/40/40';
+                }}
+              />
               <span className="text-sm font-medium text-gray-700">{session?.user?.name}</span>
               <LogoutButton variant="text" className="text-gray-400 hover:text-gray-600" />
             </div>
@@ -341,7 +349,16 @@ export default function DashboardPage() {
                     </button>
                     
                     {team.members.slice(0, 3).map((member) => (
-                      <img key={member.id} src={member.avatar} alt={member.name} className="w-8 h-8 rounded-full border-2 border-white" />
+                      <img 
+                        key={member.id} 
+                        src={member.avatar} 
+                        alt={member.name} 
+                        className="w-8 h-8 rounded-full border-2 border-white"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.src = '/api/placeholder/40/40';
+                        }}
+                      />
                     ))}
                     {team.members.length > 3 && (
                       <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium text-gray-600">

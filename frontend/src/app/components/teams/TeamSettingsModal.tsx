@@ -587,6 +587,11 @@ export const TeamSettingsModal = ({
                           src={member.user.avatarUrl || '/api/placeholder/40/40'}
                           alt={member.user.name}
                           className="w-10 h-10 rounded-full"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            // Fallback if the image fails to load
+                            e.currentTarget.src = '/api/placeholder/40/40';
+                          }}
                         />
                         <div>
                           <p className="font-medium text-gray-900">{member.user.name}</p>

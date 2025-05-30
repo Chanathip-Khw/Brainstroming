@@ -65,7 +65,11 @@ export default function BoardPage({ params }: { params: { id: string } }) {
             <img 
               src={user.avatar} 
               alt={user.name} 
-              className="w-8 h-8 rounded-full border-2 border-yellow-400" 
+              className="w-8 h-8 rounded-full border-2 border-yellow-400"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                e.currentTarget.src = '/api/placeholder/32/32';
+              }}
             />
           </div>
 
