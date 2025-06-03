@@ -8,6 +8,8 @@ import { CreateTeamModal } from '../components/teams/CreateTeamModal';
 import { TeamSettingsModal } from '../components/teams/TeamSettingsModal';
 import { CreateBoardModal } from '../components/boards/CreateBoardModal';
 import { BoardOptionsModal } from '../components/boards/BoardOptionsModal';
+import { RenameBoardModal } from '../components/boards/RenameBoardModal';
+import { Toast } from '../components/ui/Toast';
 import { Team, Board } from '../types';
 import LogoutButton from '../components/LogoutButton';
 
@@ -29,14 +31,21 @@ export default function DashboardPage() {
   // Fetch user's workspaces
   useEffect(() => {
     if (status === 'authenticated' && session?.accessToken) {
+      setLoading(true); // Ensure loading state is set
+      
       fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/workspaces`, {
         headers: {
           Authorization: `Bearer ${session.accessToken}`
         }
       })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`API error: ${res.status} ${res.statusText}`);
+        }
+        return res.json();
+      })
       .then(data => {
-        if (data.workspaces) {
+        if (data.workspaces && Array.isArray(data.workspaces)) {
           // Map backend workspaces to frontend team structure
           const mappedTeams = data.workspaces.map((workspace: any) => ({
             id: workspace.id,
@@ -49,14 +58,23 @@ export default function DashboardPage() {
                 avatar: workspace.owner.avatarUrl || '/api/placeholder/40/40' 
               }
             ],
-            boards: [] // You might want to fetch boards separately or include them in the workspace response
+            boards: [] // Boards will be fetched when needed
           }));
           setTeams(mappedTeams);
+          
+          // If there are teams, fetch boards for the first team
+          if (mappedTeams.length > 0) {
+            fetchWorkspaceProjects(mappedTeams[0].id);
+          }
+        } else {
+          console.error("Invalid workspace data format:", data);
+          setTeams([]);
         }
         setLoading(false);
       })
       .catch(err => {
         console.error("Error fetching workspaces:", err);
+        setTeams([]);
         setLoading(false);
       });
 
@@ -66,7 +84,12 @@ export default function DashboardPage() {
           Authorization: `Bearer ${session.accessToken}`
         }
       })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`API error: ${res.status} ${res.statusText}`);
+        }
+        return res.json();
+      })
       .then(data => {
         if (data.invites) {
           setPendingInvites(data.invites.length);
@@ -74,16 +97,95 @@ export default function DashboardPage() {
       })
       .catch(err => {
         console.error("Error fetching invites:", err);
+        setPendingInvites(0);
       });
     }
   }, [status, session]);
 
+  // Fetch projects for a workspace
+  const fetchWorkspaceProjects = async (workspaceId: string) => {
+    if (!session?.accessToken) return;
+    
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/workspaces/${workspaceId}/projects`, 
+        {
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`
+          }
+        }
+      );
+      
+      const data = await response.json();
+      
+      if (data.success && data.projects) {
+        // Map projects to board structure
+        const boards = data.projects.map((project: any) => ({
+          id: project.id,
+          name: project.name,
+          createdAt: new Date(project.createdAt).toISOString().split('T')[0],
+          lastModified: formatLastModified(project.updatedAt)
+        }));
+        
+        // Update the teams state with the fetched boards using functional update
+        // to avoid stale state issues
+        setTeams(prevTeams => 
+          prevTeams.map(team => 
+            team.id === workspaceId 
+              ? { ...team, boards }
+              : team
+          )
+        );
+      } else {
+        console.error(`Error fetching projects: ${data.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error(`Error fetching projects for workspace ${workspaceId}:`, error);
+    }
+  };
+  
+  // Helper function to format last modified date
+  const formatLastModified = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins === 1 ? '' : 's'} ago`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+    
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 30) return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+    
+    const diffMonths = Math.floor(diffDays / 30);
+    return `${diffMonths} month${diffMonths === 1 ? '' : 's'} ago`;
+  };
+
   const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
   const [showCreateBoardModal, setShowCreateBoardModal] = useState(false);
   const [showBoardOptionsModal, setShowBoardOptionsModal] = useState(false);
+  const [showRenameBoardModal, setShowRenameBoardModal] = useState(false);
   const [showTeamSettingsModal, setShowTeamSettingsModal] = useState(false);
   const [selectedBoard, setSelectedBoard] = useState<Board | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; visible: boolean }>({
+    message: '',
+    type: 'success',
+    visible: false
+  });
+
+  // Show toast notification
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type, visible: true });
+  };
+
+  // Hide toast notification
+  const hideToast = () => {
+    setToast(prev => ({ ...prev, visible: false }));
+  };
 
   const handleCreateTeam = async (teamName: string, inviteEmails: string[]) => {
     try {
@@ -141,20 +243,36 @@ export default function DashboardPage() {
     }
   };
 
-  const handleCreateBoard = (teamId: string, boardName: string, template: string) => {
-    const newBoard: Board = {
-      id: Date.now().toString(),
-      name: boardName,
-      createdAt: new Date().toISOString().split('T')[0],
-      lastModified: 'Just now'
-    };
-
-    setTeams(teams.map(team => 
-      team.id === teamId 
-        ? { ...team, boards: [...team.boards, newBoard] }
-        : team
-    ));
-    console.log('Board created:', boardName, 'Template:', template);
+  const handleCreateBoard = async (teamId: string, boardName: string, template: string) => {
+    try {
+      if (!session?.accessToken) return;
+      
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.accessToken}`
+        },
+        body: JSON.stringify({
+          workspaceId: teamId,
+          name: boardName,
+          description: `Board for ${boardName}`,
+          isTemplate: false,
+          templateType: template
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.project) {
+        // Fetch the latest projects from the API instead of manually updating the state
+        fetchWorkspaceProjects(teamId);
+      } else {
+        console.error('Error creating board:', data.error);
+      }
+    } catch (error) {
+      console.error('Error creating board:', error);
+    }
   };
 
   const handleBoardOptions = (board: Board, e: React.MouseEvent) => {
@@ -164,37 +282,145 @@ export default function DashboardPage() {
   };
 
   const handleEditBoard = (boardId: string) => {
-    console.log('Edit board:', boardId);
+    // Close options modal and open rename modal
+    setShowBoardOptionsModal(false);
+    setShowRenameBoardModal(true);
   };
 
-  const handleDuplicateBoard = (boardId: string) => {
-    const boardToDuplicate = teams.flatMap(team => team.boards).find(board => board.id === boardId);
-    if (boardToDuplicate) {
-      const duplicatedBoard: Board = {
-        ...boardToDuplicate,
-        id: Date.now().toString(),
-        name: `${boardToDuplicate.name} (Copy)`,
-        lastModified: 'Just now'
-      };
+  const handleRenameBoard = async (boardId: string, newName: string) => {
+    try {
+      if (!session?.accessToken) return;
       
-      setTeams(teams.map(team => ({
-        ...team,
-        boards: team.boards.find(board => board.id === boardId) 
-          ? [...team.boards, duplicatedBoard]
-          : team.boards
-      })));
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${boardId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.accessToken}`
+        },
+        body: JSON.stringify({
+          name: newName
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.project) {
+        // Update the board name in the state
+        setTeams(prevTeams => 
+          prevTeams.map(team => ({
+            ...team,
+            boards: team.boards.map(board => 
+              board.id === boardId 
+                ? { ...board, name: newName }
+                : board
+            )
+          }))
+        );
+      } else {
+        console.error('Error renaming board:', data.error);
+      }
+    } catch (error) {
+      console.error('Error renaming board:', error);
+    }
+  };
+
+  const handleDuplicateBoard = async (boardId: string) => {
+    const boardToDuplicate = teams.flatMap(team => team.boards).find(board => board.id === boardId);
+    if (!boardToDuplicate || !session?.accessToken) return;
+    
+    // Find which team this board belongs to
+    const teamWithBoard = teams.find(team => team.boards.some(board => board.id === boardId));
+    if (!teamWithBoard) return;
+    
+    try {
+      // Create a new board based on the duplicated one
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.accessToken}`
+        },
+        body: JSON.stringify({
+          workspaceId: teamWithBoard.id,
+          name: `${boardToDuplicate.name} (Copy)`,
+          description: `Copy of ${boardToDuplicate.name}`,
+          isTemplate: false
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.project) {
+        // Fetch the latest projects to include the new copy
+        fetchWorkspaceProjects(teamWithBoard.id);
+      } else {
+        console.error('Error duplicating board:', data.error);
+      }
+    } catch (error) {
+      console.error('Error duplicating board:', error);
     }
   };
 
   const handleShareBoard = (boardId: string) => {
-    console.log('Share board:', boardId);
+    // Create the board URL
+    const boardUrl = `${window.location.origin}/board/${boardId}`;
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(boardUrl)
+      .then(() => {
+        showToast(`Board link copied to clipboard`, 'success');
+      })
+      .catch(err => {
+        console.error('Could not copy board link to clipboard:', err);
+        // Fallback for browsers that don't support clipboard API
+        const textArea = document.createElement('textarea');
+        textArea.value = boardUrl;
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+          document.execCommand('copy');
+          showToast(`Board link copied to clipboard`, 'success');
+        } catch (err) {
+          console.error('Fallback: Could not copy board link to clipboard:', err);
+          showToast(`Please copy this link manually: ${boardUrl}`, 'error');
+        }
+        document.body.removeChild(textArea);
+      });
   };
 
-  const handleDeleteBoard = (boardId: string) => {
-    setTeams(teams.map(team => ({
-      ...team,
-      boards: team.boards.filter(board => board.id !== boardId)
-    })));
+  const handleDeleteBoard = async (boardId: string) => {
+    if (!session?.accessToken) return;
+    
+    // Find which team this board belongs to
+    const teamWithBoard = teams.find(team => team.boards.some(board => board.id === boardId));
+    if (!teamWithBoard) return;
+    
+    if (confirm('Are you sure you want to delete this board? This action cannot be undone.')) {
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${boardId}`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`
+          }
+        });
+        
+        if (response.ok) {
+          // Remove the board from the state
+          setTeams(prevTeams => 
+            prevTeams.map(team => ({
+              ...team,
+              boards: team.boards.filter(board => board.id !== boardId)
+            }))
+          );
+        } else {
+          const data = await response.json();
+          console.error('Error deleting board:', data.error);
+        }
+      } catch (error) {
+        console.error('Error deleting board:', error);
+      }
+    }
   };
 
   const handleJoinBoard = (boardId: string) => {
@@ -204,6 +430,8 @@ export default function DashboardPage() {
   const handleTeamSettings = (teamId: string) => {
     setSelectedTeamId(teamId);
     setShowTeamSettingsModal(true);
+    // Fetch projects for the selected team
+    fetchWorkspaceProjects(teamId);
   };
 
   const handleTeamUpdated = () => {
@@ -217,19 +445,26 @@ export default function DashboardPage() {
       .then(res => res.json())
       .then(data => {
         if (data.workspaces) {
-          const mappedTeams = data.workspaces.map((workspace: any) => ({
-            id: workspace.id,
-            name: workspace.name,
-            members: [
-              { 
-                id: workspace.owner.id, 
-                name: workspace.owner.name, 
-                email: workspace.owner.email, 
-                avatar: workspace.owner.avatarUrl || '/api/placeholder/40/40' 
-              }
-            ],
-            boards: [] // You might want to fetch boards separately or include them in the workspace response
-          }));
+          // Keep existing boards when updating teams
+          const mappedTeams = data.workspaces.map((workspace: any) => {
+            // Find existing team to preserve its boards
+            const existingTeam = teams.find(team => team.id === workspace.id);
+            
+            return {
+              id: workspace.id,
+              name: workspace.name,
+              members: [
+                { 
+                  id: workspace.owner.id, 
+                  name: workspace.owner.name, 
+                  email: workspace.owner.email, 
+                  avatar: workspace.owner.avatarUrl || '/api/placeholder/40/40' 
+                }
+              ],
+              // Preserve existing boards if the team exists
+              boards: existingTeam ? existingTeam.boards : []
+            };
+          });
           setTeams(mappedTeams);
         }
       })
@@ -427,6 +662,13 @@ export default function DashboardPage() {
           teamId={selectedTeamId}
         />
 
+        <RenameBoardModal
+          isOpen={showRenameBoardModal}
+          onClose={() => setShowRenameBoardModal(false)}
+          board={selectedBoard}
+          onRename={handleRenameBoard}
+        />
+
         <BoardOptionsModal
           isOpen={showBoardOptionsModal}
           onClose={() => setShowBoardOptionsModal(false)}
@@ -436,6 +678,15 @@ export default function DashboardPage() {
           onShare={handleShareBoard}
           onDelete={handleDeleteBoard}
         />
+
+        {/* Toast notification */}
+        {toast.visible && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            onClose={hideToast}
+          />
+        )}
       </main>
     </div>
   );
