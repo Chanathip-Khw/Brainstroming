@@ -107,14 +107,69 @@ export default function ActivityLogs() {
       case 'VOTE':
         return '👍';
       case 'JOIN':
+      case 'WORKSPACE_JOIN':
         return '🚪';
       case 'LEAVE':
+      case 'WORKSPACE_LEAVE':
         return '👋';
       case 'WORKSPACE_CREATE':
         return '🏢';
+      case 'WORKSPACE_UPDATE':
+        return '✏️';
+      case 'WORKSPACE_DELETE':
+        return '🗑️';
+      case 'WORKSPACE_INVITE_SEND':
+        return '📨';
+      case 'WORKSPACE_INVITE_ACCEPT':
+        return '✅';
+      case 'WORKSPACE_MEMBER_UPDATE':
+        return '👤';
+      case 'WORKSPACE_MEMBER_REMOVE':
+        return '🚫';
+      case 'PROJECT_CREATE':
+        return '📋';
+      case 'PROJECT_UPDATE':
+        return '📝';
+      case 'PROJECT_DELETE':
+        return '🗑️';
+      case 'PROJECT_SHARE':
+        return '🔗';
       default:
         return '📝';
     }
+  };
+
+  // Get description for activity
+  const getActivityDescription = (log: ActivityLog) => {
+    const action = log.action.toLowerCase();
+    const entityType = log.entityType.toLowerCase();
+    
+    // Workspace-specific descriptions
+    if (action.includes('workspace')) {
+      switch (log.action) {
+        case 'WORKSPACE_CREATE':
+          return `created workspace "${log.metadata?.workspaceName || 'Unknown'}"`;
+        case 'WORKSPACE_UPDATE':
+          return `updated workspace "${log.metadata?.workspaceName || 'Unknown'}"`;
+        case 'WORKSPACE_DELETE':
+          return `deleted workspace "${log.metadata?.workspaceName || 'Unknown'}"`;
+        case 'WORKSPACE_JOIN':
+          return `joined workspace "${log.metadata?.workspaceName || 'Unknown'}" as ${log.metadata?.role?.toLowerCase() || 'member'}`;
+        case 'WORKSPACE_INVITE_SEND':
+          return `sent ${log.metadata?.inviteCount || 'an'} invitation${log.metadata?.inviteCount > 1 ? 's' : ''} to workspace "${log.metadata?.workspaceName || 'Unknown'}"`;
+        case 'WORKSPACE_INVITE_ACCEPT':
+          return `accepted invitation to workspace "${log.metadata?.workspaceName || 'Unknown'}"`;
+        case 'WORKSPACE_MEMBER_UPDATE':
+          return `updated ${log.metadata?.memberName || 'a member'}'s role to ${log.metadata?.role?.toLowerCase() || 'unknown'} in "${log.metadata?.workspaceName || 'Unknown'}"`;
+        case 'WORKSPACE_MEMBER_REMOVE':
+          return `removed ${log.metadata?.memberName || 'a member'} from workspace "${log.metadata?.workspaceName || 'Unknown'}"`;
+        default:
+          return `${formatActivityType(log.action).toLowerCase()} ${entityType}`;
+      }
+    }
+    
+    // Default description
+    return `${formatActivityType(log.action).toLowerCase()} ${entityType}`;
   };
 
   return (
@@ -129,11 +184,14 @@ export default function ActivityLogs() {
             className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
           >
             <option value="">All Activities</option>
-            <option value="CREATE">Create</option>
-            <option value="UPDATE">Update</option>
-            <option value="DELETE">Delete</option>
-            <option value="COMMENT">Comment</option>
             <option value="WORKSPACE_CREATE">Workspace Creation</option>
+            <option value="WORKSPACE_UPDATE">Workspace Update</option>
+            <option value="WORKSPACE_DELETE">Workspace Deletion</option>
+            <option value="WORKSPACE_JOIN">Workspace Join</option>
+            <option value="WORKSPACE_MEMBER_UPDATE">Member Role Update</option>
+            <option value="WORKSPACE_MEMBER_REMOVE">Member Removal</option>
+            <option value="WORKSPACE_INVITE_SEND">Invitation Sent</option>
+            <option value="WORKSPACE_INVITE_ACCEPT">Invitation Accepted</option>
           </select>
         </div>
       </div>
@@ -171,25 +229,9 @@ export default function ActivityLogs() {
                     
                     <div className="mt-1 text-sm text-gray-600">
                       <span>
-                        {log.user.name} {formatActivityType(log.action).toLowerCase()} {log.entityType.toLowerCase()}
+                        {log.user.name} {getActivityDescription(log)}
                       </span>
                     </div>
-                    
-                    {log.metadata && (
-                      <div className="mt-2 text-sm text-gray-600">
-                        {log.action === 'WORKSPACE_CREATE' && (
-                          <div className="space-y-1">
-                            <p>Workspace: {log.metadata.workspaceName}</p>
-                          </div>
-                        )}
-                        
-                        {log.action === 'COMMENT' && (
-                          <div className="space-y-1">
-                            <p>"{log.metadata.content?.substring(0, 50)}..."</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>

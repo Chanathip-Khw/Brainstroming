@@ -4,6 +4,8 @@ import { authService } from '../services/authService'
 import { AuthenticatedRequest } from '../types'
 import { randomBytes } from 'crypto'
 import { WorkspaceInvite } from '@prisma/client'
+import { PrismaClient } from '@prisma/client'
+import { ActionType } from '@prisma/client'
 
 export const workspaceController = {
   // Get user's workspaces
@@ -167,7 +169,7 @@ export const workspaceController = {
       // Log activity with the new workspace ID
       await authService.logActivity(
         request.currentUser!.userId, 
-        'WORKSPACE_CREATE', 
+        "WORKSPACE_CREATE", 
         {
           workspaceId: workspace.id,
           workspaceName: workspace.name
@@ -235,10 +237,15 @@ export const workspaceController = {
         }
       })
 
+      // Debug log for action value
+      const action = "WORKSPACE_UPDATE";
+      console.log('About to log activity with action:', action);
+      console.log('Action type:', typeof action);
+
       // Log activity
       await authService.logActivity(
         request.currentUser!.userId,
-        'WORKSPACE_UPDATE',
+        action,
         {
           workspaceId: id,
           workspaceName: updatedWorkspace.name,
@@ -291,7 +298,7 @@ export const workspaceController = {
       // Log activity
       await authService.logActivity(
         request.currentUser!.userId,
-        'WORKSPACE_DELETE',
+        "WORKSPACE_DELETE",
         {
           workspaceId: id,
           workspaceName: workspace.name
@@ -393,7 +400,7 @@ export const workspaceController = {
       // Log activity
       await authService.logActivity(
         request.currentUser!.userId,
-        'WORKSPACE_MEMBER_UPDATE',
+        "WORKSPACE_MEMBER_UPDATE",
         {
           workspaceId,
           workspaceName: workspace.name,
@@ -497,7 +504,7 @@ export const workspaceController = {
       // Log activity
       await authService.logActivity(
         request.currentUser!.userId,
-        'WORKSPACE_MEMBER_REMOVE',
+        "WORKSPACE_MEMBER_REMOVE",
         {
           workspaceId,
           workspaceName: workspace.name,
@@ -708,7 +715,7 @@ export const workspaceController = {
       // Log activity
       await authService.logActivity(
         request.currentUser!.userId,
-        'WORKSPACE_JOIN',
+        "WORKSPACE_JOIN",
         {
           workspaceId: invite.workspaceId,
           workspaceName: invite.workspace.name,

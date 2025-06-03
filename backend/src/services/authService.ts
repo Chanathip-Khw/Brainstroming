@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client'
+import { ActionType } from '@prisma/client'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
@@ -205,13 +206,7 @@ export class AuthService {
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
         }
       });
-      
-      // Log the token refresh
-      await this.logActivity(user.id, 'TOKEN_REFRESH', {
-        sessionId: session.id,
-        refreshTime: new Date().toISOString()
-      });
-      
+
       return tokenPair;
     } catch (error) {
       throw new Error(`Failed to refresh tokens: ${error}`);
@@ -355,24 +350,32 @@ export class AuthService {
 
   // Log activity
   async logActivity(userId: string, action: string, metadata?: any, workspaceId?: string) {
-    try {
-      // Skip logging for login/logout/auth related actions - we're using the User table for login tracking
-      if (['USER_LOGIN', 'USER_LOGOUT', 'USER_LOGOUT_ALL', 'TOKEN_REFRESH'].includes(action)) {
-        console.log(`Auth activity skipped (using User.lastLogin instead): ${action} for user ${userId}`);
+    try {     
+      // Validate action is not empty
+      if (!action || action.toString().trim() === '') {
+        console.error('Cannot log activity: Empty action provided');
         return;
       }
       
       // Only log workspace-related actions when a workspaceId is provided
       if (workspaceId) {
+        // Log the activity data for debugging
+        console.log(`Logging activity: ${action} for user ${userId} in workspace ${workspaceId}`);
+        
+        // Debug log to see exactly what's being passed to Prisma
+        const activityData = {
+          workspaceId,
+          userId,
+          entityType: 'WORKSPACE',
+          entityId: workspaceId,
+          action: action.toString(), // Ensure it's a string
+          metadata
+        };
+        console.log('Creating activity log with data:', JSON.stringify(activityData));
+        
+        // Create the activity log
         await prisma.activityLog.create({
-          data: {
-            workspaceId,
-            userId,
-            entityType: 'WORKSPACE',
-            entityId: workspaceId,
-            action: action as any,
-            metadata
-          }
+          data: activityData
         });
         return;
       }

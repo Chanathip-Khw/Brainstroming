@@ -66,6 +66,7 @@ enum SessionStatus {
 }
 
 enum ActionType {
+  // General actions
   CREATE
   UPDATE
   DELETE
@@ -78,6 +79,23 @@ enum ActionType {
   VOTE
   JOIN
   LEAVE
+  
+  // Workspace specific actions
+  WORKSPACE_CREATE
+  WORKSPACE_UPDATE
+  WORKSPACE_DELETE
+  WORKSPACE_JOIN
+  WORKSPACE_LEAVE
+  WORKSPACE_INVITE_SEND
+  WORKSPACE_INVITE_ACCEPT
+  WORKSPACE_MEMBER_UPDATE
+  WORKSPACE_MEMBER_REMOVE
+  
+  // Project specific actions
+  PROJECT_CREATE
+  PROJECT_UPDATE
+  PROJECT_DELETE
+  PROJECT_SHARE
 }
 
 model User {
@@ -372,7 +390,7 @@ model ActivityLog {
   id          String     @id @default(cuid())
   workspaceId String     @map("workspace_id")
   userId      String     @map("user_id")
-  action      ActionType
+  action      String     // Changed from ActionType to String
   entityType  String     @map("entity_type")
   entityId    String     @map("entity_id")
   metadata    Json?
