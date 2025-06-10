@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, use } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Download, Settings, Zap } from 'lucide-react';
@@ -9,11 +9,13 @@ import { CanvasBoard } from '../../components/canvas/CanvasBoard';
 import { BoardSettingsModal } from '../../components/boards/BoardSettingsModal';
 import { BoardSettings, User } from '../../types';
 
-export default function BoardPage({ params }: { params: { id: string } }) {
+export default function BoardPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
   const { data: session, status } = useSession();
   const router = useRouter();
   const [showBoardSettings, setShowBoardSettings] = useState(false);
-  const [boardName, setBoardName] = useState('Product Brainstorm');
+  const [boardName, setBoardName] = useState('Loading...');
+  const [loading, setLoading] = useState(true);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -22,12 +24,42 @@ export default function BoardPage({ params }: { params: { id: string } }) {
     }
   }, [status, router]);
 
+  // Fetch board data
+  useEffect(() => {
+    if (status === 'authenticated' && session?.accessToken) {
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${resolvedParams.id}`, {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`
+        }
+      })
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`API error: ${res.status} ${res.statusText}`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (data.success && data.project) {
+          setBoardName(data.project.name);
+        } else {
+          console.error('Failed to fetch board:', data.error);
+          router.push('/dashboard');
+        }
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Error fetching board:', err);
+        router.push('/dashboard');
+      });
+    }
+      }, [status, session, resolvedParams.id, router]);
+
   const handleSaveBoardSettings = (settings: BoardSettings) => {
     console.log('Board settings saved:', settings);
     setBoardName(settings.boardName);
   };
 
-  if (status === 'loading') {
+  if (status === 'loading' || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
@@ -87,7 +119,7 @@ export default function BoardPage({ params }: { params: { id: string } }) {
         </div>
       </header>
 
-      <CanvasBoard user={user} />
+      <CanvasBoard user={user} projectId={resolvedParams.id} />
 
       <BoardSettingsModal
         isOpen={showBoardSettings}

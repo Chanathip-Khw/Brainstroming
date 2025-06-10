@@ -1,71 +1,416 @@
-import React, { useRef, useState } from 'react';
-import { Hand, Square, Type, Circle, Minus, Move, Vote } from 'lucide-react';
-import { User, CanvasElement } from '../../types';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
+import { Hand, Square, Type, Circle, Minus, Move, Vote, Trash2, Edit3 } from 'lucide-react';
+import { User } from '../../types';
+
+interface CanvasElement {
+  id: string;
+  type: 'STICKY_NOTE' | 'TEXT' | 'SHAPE';
+  positionX: number;
+  positionY: number;
+  width: number;
+  height: number;
+  content: string;
+  styleData: {
+    color: string;
+    [key: string]: any;
+  };
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 interface CanvasBoardProps {
   user: User;
+  projectId: string;
 }
 
-export const CanvasBoard = ({ user }: CanvasBoardProps) => {
+export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
+  const { data: session } = useSession();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [tool, setTool] = useState<string>('select');
-  const [elements, setElements] = useState<CanvasElement[]>([
-    { id: '1', type: 'sticky', x: 200, y: 150, content: 'User needs better onboarding', color: 'bg-yellow-200', votes: 3, author: 'John' },
-    { id: '2', type: 'sticky', x: 400, y: 200, content: 'Mobile app integration', color: 'bg-blue-200', votes: 1, author: 'Jane' },
-    { id: '3', type: 'sticky', x: 300, y: 350, content: 'Improve search functionality', color: 'bg-green-200', votes: 5, author: 'Mike' }
-  ]);
-  const [selectedColor, setSelectedColor] = useState('bg-yellow-200');
+  const [elements, setElements] = useState<CanvasElement[]>([]);
+  const [selectedColor, setSelectedColor] = useState('#fbbf24');
   const [isVoting, setIsVoting] = useState(false);
   const [scale, setScale] = useState(1);
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
+  const [selectedElement, setSelectedElement] = useState<string | null>(null);
+  const [editingElement, setEditingElement] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [loading, setLoading] = useState(true);
 
   const colors = [
-    'bg-yellow-200', 'bg-blue-200', 'bg-green-200', 'bg-pink-200', 
-    'bg-purple-200', 'bg-orange-200', 'bg-red-200', 'bg-gray-200'
+    '#fbbf24', '#3b82f6', '#10b981', '#ec4899', 
+    '#8b5cf6', '#f97316', '#ef4444', '#6b7280'
   ];
 
   const tools = [
     { id: 'select', icon: Hand, label: 'Select' },
-    { id: 'sticky', icon: Square, label: 'Sticky Note' },
-    { id: 'text', icon: Type, label: 'Text' },
-    { id: 'shape', icon: Circle, label: 'Shape' },
+    { id: 'STICKY_NOTE', icon: Square, label: 'Sticky Note' },
+    { id: 'TEXT', icon: Type, label: 'Text' },
+    { id: 'SHAPE', icon: Circle, label: 'Shape' },
     { id: 'line', icon: Minus, label: 'Line' },
     { id: 'move', icon: Move, label: 'Pan' }
   ];
 
+  // Fetch elements from backend
+  const fetchElements = useCallback(async () => {
+    if (!session?.accessToken || !projectId) return;
+    
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${projectId}/elements`,
+        {
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`
+          }
+        }
+      );
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Convert decimal positions to numbers
+        const processedElements = data.elements.map((element: any) => ({
+          ...element,
+          positionX: typeof element.positionX === 'string' ? parseFloat(element.positionX) : Number(element.positionX),
+          positionY: typeof element.positionY === 'string' ? parseFloat(element.positionY) : Number(element.positionY),
+          width: typeof element.width === 'string' ? parseFloat(element.width) : Number(element.width),
+          height: typeof element.height === 'string' ? parseFloat(element.height) : Number(element.height)
+        }));
+        setElements(processedElements);
+        console.log('Loaded elements with positions:', processedElements);
+      } else {
+        console.error('Failed to fetch elements:', data.error);
+      }
+    } catch (error) {
+      console.error('Error fetching elements:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [session?.accessToken, projectId]);
+
+  // Create element on backend
+  const createElement = async (elementData: Partial<CanvasElement>) => {
+    if (!session?.accessToken || !projectId) return;
+    
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${projectId}/elements`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.accessToken}`
+          },
+          body: JSON.stringify({
+            type: elementData.type,
+            x: elementData.positionX,
+            y: elementData.positionY,
+            width: elementData.width,
+            height: elementData.height,
+            content: elementData.content,
+            color: elementData.styleData?.color,
+            style: elementData.styleData
+          })
+        }
+      );
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Convert decimal positions to numbers for the new element
+        const processedElement = {
+          ...data.element,
+          positionX: typeof data.element.positionX === 'string' ? parseFloat(data.element.positionX) : Number(data.element.positionX),
+          positionY: typeof data.element.positionY === 'string' ? parseFloat(data.element.positionY) : Number(data.element.positionY),
+          width: typeof data.element.width === 'string' ? parseFloat(data.element.width) : Number(data.element.width),
+          height: typeof data.element.height === 'string' ? parseFloat(data.element.height) : Number(data.element.height)
+        };
+        setElements(prev => [...prev, processedElement]);
+      } else {
+        console.error('Failed to create element:', data.error);
+      }
+    } catch (error) {
+      console.error('Error creating element:', error);
+    }
+  };
+
+  // Update element on backend
+  const updateElement = async (elementId: string, updateData: Partial<CanvasElement>) => {
+    if (!session?.accessToken || !projectId) return;
+    
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${projectId}/elements/${elementId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.accessToken}`
+          },
+          body: JSON.stringify(updateData)
+        }
+      );
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Convert decimal positions to numbers for the updated element
+        const processedElement = {
+          ...data.element,
+          positionX: typeof data.element.positionX === 'string' ? parseFloat(data.element.positionX) : Number(data.element.positionX),
+          positionY: typeof data.element.positionY === 'string' ? parseFloat(data.element.positionY) : Number(data.element.positionY),
+          width: typeof data.element.width === 'string' ? parseFloat(data.element.width) : Number(data.element.width),
+          height: typeof data.element.height === 'string' ? parseFloat(data.element.height) : Number(data.element.height)
+        };
+        setElements(prev => prev.map(el => 
+          el.id === elementId ? { ...el, ...processedElement } : el
+        ));
+      } else {
+        console.error('Failed to update element:', data.error);
+      }
+    } catch (error) {
+      console.error('Error updating element:', error);
+    }
+  };
+
+  // Delete element on backend
+  const deleteElement = async (elementId: string) => {
+    if (!session?.accessToken || !projectId) return;
+    
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${projectId}/elements/${elementId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`
+          }
+        }
+      );
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setElements(prev => prev.filter(el => el.id !== elementId));
+        setSelectedElement(null);
+      } else {
+        console.error('Failed to delete element:', data.error);
+      }
+    } catch (error) {
+      console.error('Error deleting element:', error);
+    }
+  };
+
+  // Load elements on component mount
+  useEffect(() => {
+    fetchElements();
+  }, [fetchElements]);
+
+  // Handle mouse wheel zoom
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        
+        const zoomFactor = 0.1;
+        const delta = -e.deltaY;
+        const newScale = delta > 0 
+          ? Math.min(3, scale + zoomFactor) 
+          : Math.max(0.3, scale - zoomFactor);
+        
+        setScale(newScale);
+      }
+    };
+
+    const canvasElement = canvasRef.current;
+    if (canvasElement) {
+      canvasElement.addEventListener('wheel', handleWheel, { passive: false });
+      
+      return () => {
+        canvasElement.removeEventListener('wheel', handleWheel);
+      };
+    }
+  }, [scale]);
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Delete selected element when Delete or Backspace is pressed
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElement) {
+        // Don't trigger if user is typing in an input/textarea
+        if (
+          e.target instanceof HTMLInputElement ||
+          e.target instanceof HTMLTextAreaElement ||
+          (e.target as HTMLElement)?.isContentEditable
+        ) {
+          return;
+        }
+        
+        e.preventDefault();
+        deleteElement(selectedElement);
+      }
+      
+      // Escape to deselect
+      if (e.key === 'Escape') {
+        setSelectedElement(null);
+        setEditingElement(null);
+      }
+      
+      // Zoom shortcuts
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          setScale(prev => Math.min(3, prev + 0.1));
+        } else if (e.key === '-') {
+          e.preventDefault();
+          setScale(prev => Math.max(0.3, prev - 0.1));
+        } else if (e.key === '0') {
+          e.preventDefault();
+          setScale(1);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedElement, deleteElement]);
+
   const handleCanvasClick = (e: React.MouseEvent) => {
-    if (tool === 'sticky') {
+    if (tool === 'select') {
+      setSelectedElement(null);
+      return;
+    }
+
+    if (['STICKY_NOTE', 'TEXT', 'SHAPE'].includes(tool)) {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect) {
         const x = (e.clientX - rect.left - panX) / scale;
         const y = (e.clientY - rect.top - panY) / scale;
         
-        const newElement: CanvasElement = {
-          id: Date.now().toString(),
-          type: 'sticky',
-          x,
-          y,
-          content: 'New idea...',
-          color: selectedColor,
-          votes: 0,
-          author: user.name
+        const newElement: Partial<CanvasElement> = {
+          type: tool as 'STICKY_NOTE' | 'TEXT' | 'SHAPE',
+          positionX: x,
+          positionY: y,
+          width: tool === 'TEXT' ? 300 : 200,
+          height: tool === 'TEXT' ? 50 : 150,
+          content: tool === 'STICKY_NOTE' ? 'New idea...' : tool === 'TEXT' ? 'Type here...' : '',
+          styleData: { color: selectedColor }
         };
         
-        setElements([...elements, newElement]);
+        createElement(newElement);
       }
     }
   };
 
-  const handleVote = (elementId: string) => {
-    if (isVoting) {
-      setElements(elements.map(el => 
-        el.id === elementId 
-          ? { ...el, votes: (el.votes || 0) + 1 }
+  const handleElementClick = (elementId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (tool === 'select') {
+      setSelectedElement(elementId);
+    }
+  };
+
+  const handleElementDoubleClick = (elementId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const element = elements.find(el => el.id === elementId);
+    if (element) {
+      setEditingElement(elementId);
+      setEditingText(element.content || '');
+    }
+  };
+
+  const handleTextSubmit = () => {
+    if (editingElement) {
+      updateElement(editingElement, { content: editingText });
+      setEditingElement(null);
+      setEditingText('');
+    }
+  };
+
+  const handleElementMouseDown = (elementId: string, e: React.MouseEvent) => {
+    if (tool !== 'select') return;
+    
+    e.stopPropagation();
+    const element = elements.find(el => el.id === elementId);
+    if (!element) return;
+
+    setSelectedElement(elementId);
+    setIsDragging(true);
+    
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      const x = (e.clientX - rect.left - panX) / scale;
+      const y = (e.clientY - rect.top - panY) / scale;
+      
+      setDragOffset({
+        x: x - element.positionX,
+        y: y - element.positionY
+      });
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !selectedElement) return;
+    
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      const x = (e.clientX - rect.left - panX) / scale - dragOffset.x;
+      const y = (e.clientY - rect.top - panY) / scale - dragOffset.y;
+      
+      setElements(prev => prev.map(el => 
+        el.id === selectedElement 
+          ? { ...el, positionX: x, positionY: y }
           : el
       ));
     }
   };
+
+  const handleMouseUp = () => {
+    if (isDragging && selectedElement) {
+      const element = elements.find(el => el.id === selectedElement);
+      if (element) {
+        updateElement(selectedElement, {
+          positionX: element.positionX,
+          positionY: element.positionY
+        });
+      }
+    }
+    setIsDragging(false);
+  };
+
+  const getElementColor = (element: CanvasElement) => {
+    const color = element.styleData?.color || '#fbbf24';
+    
+    // Convert hex to Tailwind-like classes or use inline styles
+    const colorMap: { [key: string]: string } = {
+      '#fbbf24': 'bg-yellow-200',
+      '#3b82f6': 'bg-blue-200', 
+      '#10b981': 'bg-green-200',
+      '#ec4899': 'bg-pink-200',
+      '#8b5cf6': 'bg-purple-200',
+      '#f97316': 'bg-orange-200',
+      '#ef4444': 'bg-red-200',
+      '#6b7280': 'bg-gray-200'
+    };
+    
+    return colorMap[color] || 'bg-yellow-200';
+  };
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-1">
@@ -97,43 +442,42 @@ export const CanvasBoard = ({ user }: CanvasBoardProps) => {
               <button
                 key={color}
                 onClick={() => setSelectedColor(color)}
-                className={`w-8 h-8 rounded-lg ${color} border-2 ${
+                className={`w-8 h-8 rounded-lg border-2 ${
                   selectedColor === color ? 'border-gray-800' : 'border-gray-300'
                 }`}
+                style={{ backgroundColor: color }}
               />
             ))}
           </div>
         </div>
 
-        <div>
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Actions</h3>
-          <button
-            onClick={() => setIsVoting(!isVoting)}
-            className={`w-full p-3 rounded-lg flex items-center gap-2 transition-colors ${
-              isVoting 
-                ? 'bg-green-100 text-green-700' 
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            <Vote className="w-4 h-4" />
-            {isVoting ? 'Stop Voting' : 'Start Voting'}
-          </button>
-        </div>
-
-        <div>
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Templates</h3>
-          <div className="space-y-2">
-            <button className="w-full p-2 text-left text-sm text-gray-600 hover:bg-gray-100 rounded">
-              Brainstorming
-            </button>
-            <button className="w-full p-2 text-left text-sm text-gray-600 hover:bg-gray-100 rounded">
-              Retrospective
-            </button>
-            <button className="w-full p-2 text-left text-sm text-gray-600 hover:bg-gray-100 rounded">
-              User Journey
-            </button>
+        {selectedElement && (
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">Selected Element</h3>
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  const element = elements.find(el => el.id === selectedElement);
+                  if (element) {
+                    setEditingElement(selectedElement);
+                    setEditingText(element.content || '');
+                  }
+                }}
+                className="w-full p-2 text-left text-sm bg-gray-100 hover:bg-gray-200 rounded flex items-center gap-2"
+              >
+                <Edit3 className="w-4 h-4" />
+                Edit Text
+              </button>
+              <button
+                onClick={() => deleteElement(selectedElement)}
+                className="w-full p-2 text-left text-sm bg-red-100 text-red-700 hover:bg-red-200 rounded flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="flex-1 relative overflow-hidden">
@@ -141,6 +485,8 @@ export const CanvasBoard = ({ user }: CanvasBoardProps) => {
           ref={canvasRef}
           className="w-full h-full cursor-crosshair relative"
           onClick={handleCanvasClick}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
           style={{
             transform: `scale(${scale}) translate(${panX}px, ${panY}px)`,
             transformOrigin: '0 0'
@@ -160,26 +506,45 @@ export const CanvasBoard = ({ user }: CanvasBoardProps) => {
           {elements.map((element) => (
             <div
               key={element.id}
-              className={`absolute cursor-pointer select-none ${element.color} p-3 rounded-lg shadow-sm min-w-32 min-h-20 flex flex-col justify-between`}
+              className={`absolute cursor-pointer select-none ${getElementColor(element)} p-3 rounded-lg shadow-sm flex flex-col justify-between ${
+                selectedElement === element.id ? 'ring-2 ring-indigo-500' : ''
+              }`}
               style={{
-                left: element.x,
-                top: element.y,
+                left: `${element.positionX}px`,
+                top: `${element.positionY}px`,
+                width: `${element.width}px`,
+                height: `${element.height}px`,
                 transform: 'translate(-50%, -50%)'
               }}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleVote(element.id);
-              }}
+              onClick={(e) => handleElementClick(element.id, e)}
+              onDoubleClick={(e) => handleElementDoubleClick(element.id, e)}
+              onMouseDown={(e) => handleElementMouseDown(element.id, e)}
             >
-              <div className="text-sm text-gray-800 mb-2">{element.content}</div>
-              <div className="flex items-center justify-between text-xs text-gray-600">
-                <span>{element.author}</span>
-                {(element.votes || 0) > 0 && (
-                  <div className="flex items-center gap-1 bg-white rounded-full px-2 py-1">
-                    <Vote className="w-3 h-3" />
-                    {element.votes}
-                  </div>
-                )}
+              {editingElement === element.id ? (
+                <textarea
+                  value={editingText}
+                  onChange={(e) => setEditingText(e.target.value)}
+                  onBlur={handleTextSubmit}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleTextSubmit();
+                    }
+                  }}
+                  className="w-full h-full resize-none border-none outline-none bg-transparent text-sm"
+                  autoFocus
+                />
+              ) : (
+                <div className="text-sm text-gray-800 mb-2 flex-1 overflow-hidden">
+                  {element.content || 'Click to edit...'}
+                </div>
+              )}
+              
+              <div className="flex items-center justify-between text-xs text-gray-600 mt-auto">
+                <span className="truncate">
+                  {element.createdBy === user.id ? 'You' : 'User'}
+                </span>
+                <span>{new Date(element.createdAt).toLocaleDateString()}</span>
               </div>
             </div>
           ))}

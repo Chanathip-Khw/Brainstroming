@@ -353,5 +353,326 @@ export const projectController = {
         error: 'Failed to delete board'
       });
     }
+  },
+
+  // Get single project with canvas elements
+  async getProject(request: AuthenticatedRequest, reply: FastifyReply) {
+    try {
+      if (!request.currentUser) {
+        return reply.code(401).send({
+          success: false,
+          error: "Authentication required"
+        });
+      }
+
+      const userId = request.currentUser.userId;
+      const { id } = request.params as { id: string };
+
+      // Find the project with workspace member check
+      const project = await prisma.project.findFirst({
+        where: {
+          id,
+          isActive: true,
+          workspace: {
+            members: {
+              some: {
+                userId,
+                isActive: true
+              }
+            }
+          }
+        },
+        include: {
+          canvasElements: {
+            orderBy: {
+              createdAt: 'asc'
+            }
+          },
+          workspace: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        }
+      });
+
+      if (!project) {
+        return reply.code(404).send({
+          success: false,
+          error: "Board not found or you don't have access"
+        });
+      }
+
+      return reply.send({
+        success: true,
+        project
+      });
+    } catch (error) {
+      console.error('Error fetching project:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to fetch board'
+      });
+    }
+  },
+
+  // Create canvas element
+  async createElement(request: AuthenticatedRequest, reply: FastifyReply) {
+    try {
+      if (!request.currentUser) {
+        return reply.code(401).send({
+          success: false,
+          error: "Authentication required"
+        });
+      }
+
+      const userId = request.currentUser.userId;
+      const { projectId } = request.params as { projectId: string };
+      const { type, x, y, width, height, content, color, style } = request.body as any;
+
+      // Verify user has access to the project
+      const project = await prisma.project.findFirst({
+        where: {
+          id: projectId,
+          isActive: true,
+          workspace: {
+            members: {
+              some: {
+                userId,
+                isActive: true
+              }
+            }
+          }
+        }
+      });
+
+      if (!project) {
+        return reply.code(404).send({
+          success: false,
+          error: "Board not found or you don't have access"
+        });
+      }
+
+      // Create the canvas element
+      const element = await prisma.canvasElement.create({
+        data: {
+          projectId,
+          type,
+          positionX: x || 0,
+          positionY: y || 0,
+          width: width || 200,
+          height: height || 100,
+          content: content || '',
+          styleData: { color: color || '#fbbf24', ...style },
+          createdBy: userId
+        }
+      });
+
+      // Update project's updatedAt timestamp
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { updatedAt: new Date() }
+      });
+
+      return reply.code(201).send({
+        success: true,
+        element
+      });
+    } catch (error) {
+      console.error('Error creating canvas element:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to create element'
+      });
+    }
+  },
+
+  // Update canvas element
+  async updateElement(request: AuthenticatedRequest, reply: FastifyReply) {
+    try {
+      if (!request.currentUser) {
+        return reply.code(401).send({
+          success: false,
+          error: "Authentication required"
+        });
+      }
+
+      const userId = request.currentUser.userId;
+      const { projectId, elementId } = request.params as { projectId: string; elementId: string };
+      const updateData = request.body as any;
+
+      // Verify user has access and element exists
+      const element = await prisma.canvasElement.findFirst({
+        where: {
+          id: elementId,
+          projectId,
+          project: {
+            workspace: {
+              members: {
+                some: {
+                  userId,
+                  isActive: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!element) {
+        return reply.code(404).send({
+          success: false,
+          error: "Element not found or you don't have access"
+        });
+      }
+
+      // Update the element
+      const updatedElement = await prisma.canvasElement.update({
+        where: { id: elementId },
+        data: {
+          ...updateData,
+          updatedAt: new Date()
+        }
+      });
+
+      // Update project's updatedAt timestamp
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { updatedAt: new Date() }
+      });
+
+      return reply.send({
+        success: true,
+        element: updatedElement
+      });
+    } catch (error) {
+      console.error('Error updating canvas element:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to update element'
+      });
+    }
+  },
+
+  // Delete canvas element
+  async deleteElement(request: AuthenticatedRequest, reply: FastifyReply) {
+    try {
+      if (!request.currentUser) {
+        return reply.code(401).send({
+          success: false,
+          error: "Authentication required"
+        });
+      }
+
+      const userId = request.currentUser.userId;
+      const { projectId, elementId } = request.params as { projectId: string; elementId: string };
+
+      // Verify user has access and element exists
+      const element = await prisma.canvasElement.findFirst({
+        where: {
+          id: elementId,
+          projectId,
+          project: {
+            workspace: {
+              members: {
+                some: {
+                  userId,
+                  isActive: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!element) {
+        return reply.code(404).send({
+          success: false,
+          error: "Element not found or you don't have access"
+        });
+      }
+
+      // Delete the element (hard delete since no isActive field)
+      await prisma.canvasElement.delete({
+        where: { id: elementId }
+      });
+
+      // Update project's updatedAt timestamp
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { updatedAt: new Date() }
+      });
+
+      return reply.send({
+        success: true,
+        message: "Element deleted successfully"
+      });
+    } catch (error) {
+      console.error('Error deleting canvas element:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to delete element'
+      });
+    }
+  },
+
+  // Get canvas elements for a project
+  async getElements(request: AuthenticatedRequest, reply: FastifyReply) {
+    try {
+      if (!request.currentUser) {
+        return reply.code(401).send({
+          success: false,
+          error: "Authentication required"
+        });
+      }
+
+      const userId = request.currentUser.userId;
+      const { projectId } = request.params as { projectId: string };
+
+      // Verify user has access to the project
+      const project = await prisma.project.findFirst({
+        where: {
+          id: projectId,
+          isActive: true,
+          workspace: {
+            members: {
+              some: {
+                userId,
+                isActive: true
+              }
+            }
+          }
+        }
+      });
+
+      if (!project) {
+        return reply.code(404).send({
+          success: false,
+          error: "Board not found or you don't have access"
+        });
+      }
+
+      // Get all canvas elements
+      const elements = await prisma.canvasElement.findMany({
+        where: {
+          projectId
+        },
+        orderBy: {
+          createdAt: 'asc'
+        }
+      });
+
+      return reply.send({
+        success: true,
+        elements
+      });
+    } catch (error) {
+      console.error('Error fetching canvas elements:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to fetch elements'
+      });
+    }
   }
 } 
