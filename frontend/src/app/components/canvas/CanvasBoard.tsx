@@ -40,7 +40,10 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   const [editingText, setEditingText] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [loading, setLoading] = useState(true);
+  const [showHelp, setShowHelp] = useState(true);
 
   const colors = [
     '#fbbf24', '#3b82f6', '#10b981', '#ec4899', 
@@ -214,17 +217,15 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   // Handle mouse wheel zoom
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        
-        const zoomFactor = 0.1;
-        const delta = -e.deltaY;
-        const newScale = delta > 0 
-          ? Math.min(3, scale + zoomFactor) 
-          : Math.max(0.3, scale - zoomFactor);
-        
-        setScale(newScale);
-      }
+      e.preventDefault();
+      
+      const zoomFactor = 0.1;
+      const delta = -e.deltaY;
+      const newScale = delta > 0 
+        ? Math.min(3, scale + zoomFactor) 
+        : Math.max(0.3, scale - zoomFactor);
+      
+      setScale(newScale);
     };
 
     const canvasElement = canvasRef.current;
@@ -272,6 +273,44 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
         } else if (e.key === '0') {
           e.preventDefault();
           setScale(1);
+          setPanX(0);
+          setPanY(0);
+        }
+      }
+      
+      // Alternative zoom shortcuts without Ctrl
+      if (e.key === '=' || e.key === '+') {
+        if (!e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          setScale(prev => Math.min(3, prev + 0.1));
+        }
+      } else if (e.key === '-') {
+        if (!e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          setScale(prev => Math.max(0.3, prev - 0.1));
+        }
+      }
+      
+      // Pan with arrow keys
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        if (!selectedElement) { // Only pan if no element is selected
+          e.preventDefault();
+          const panAmount = 50;
+          
+          switch (e.key) {
+            case 'ArrowUp':
+              setPanY(prev => prev + panAmount);
+              break;
+            case 'ArrowDown':
+              setPanY(prev => prev - panAmount);
+              break;
+            case 'ArrowLeft':
+              setPanX(prev => prev + panAmount);
+              break;
+            case 'ArrowRight':
+              setPanX(prev => prev - panAmount);
+              break;
+          }
         }
       }
     };
@@ -358,22 +397,34 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging || !selectedElement) return;
+    // Handle element dragging
+    if (isDragging && selectedElement && !isPanning) {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect) {
+        const x = (e.clientX - rect.left - panX) / scale - dragOffset.x;
+        const y = (e.clientY - rect.top - panY) / scale - dragOffset.y;
+        
+        setElements(prev => prev.map(el => 
+          el.id === selectedElement 
+            ? { ...el, positionX: x, positionY: y }
+            : el
+        ));
+      }
+    }
     
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (rect) {
-      const x = (e.clientX - rect.left - panX) / scale - dragOffset.x;
-      const y = (e.clientY - rect.top - panY) / scale - dragOffset.y;
+    // Handle canvas panning
+    if (isPanning) {
+      const deltaX = e.clientX - panStart.x;
+      const deltaY = e.clientY - panStart.y;
       
-      setElements(prev => prev.map(el => 
-        el.id === selectedElement 
-          ? { ...el, positionX: x, positionY: y }
-          : el
-      ));
+      setPanX(prev => prev + deltaX);
+      setPanY(prev => prev + deltaY);
+      
+      setPanStart({ x: e.clientX, y: e.clientY });
     }
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e?: React.MouseEvent) => {
     if (isDragging && selectedElement) {
       const element = elements.find(el => el.id === selectedElement);
       if (element) {
@@ -384,6 +435,16 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       }
     }
     setIsDragging(false);
+    setIsPanning(false);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    // Middle mouse button for panning
+    if (e.button === 1) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ x: e.clientX, y: e.clientY });
+    }
   };
 
   const getElementColor = (element: CanvasElement) => {
@@ -483,10 +544,17 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       <div className="flex-1 relative overflow-hidden">
         <div
           ref={canvasRef}
-          className="w-full h-full cursor-crosshair relative"
+          className={`w-full h-full relative ${
+            isPanning ? 'cursor-grabbing' :
+            tool === 'select' ? 'cursor-default' :
+            tool === 'move' ? 'cursor-move' :
+            'cursor-crosshair'
+          }`}
           onClick={handleCanvasClick}
+          onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
+          onContextMenu={(e) => e.preventDefault()} // Prevent right-click menu
           style={{
             transform: `scale(${scale}) translate(${panX}px, ${panY}px)`,
             transformOrigin: '0 0'
@@ -552,19 +620,62 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
         <div className="absolute bottom-4 right-4 bg-white rounded-lg shadow-lg p-2 flex items-center gap-2">
           <button 
-            onClick={() => setScale(Math.max(0.5, scale - 0.1))}
-            className="p-2 hover:bg-gray-100 rounded"
+            onClick={() => setScale(Math.max(0.3, scale - 0.1))}
+            className="p-2 hover:bg-gray-100 rounded text-lg font-bold"
+            title="Zoom out (Ctrl + -)"
           >
             -
           </button>
-          <span className="text-sm font-medium w-12 text-center">{Math.round(scale * 100)}%</span>
+          <button
+            onClick={() => setScale(1)}
+            className="text-sm font-medium w-16 text-center hover:bg-gray-100 rounded px-2 py-1"
+            title="Reset zoom (Ctrl + 0)"
+          >
+            {Math.round(scale * 100)}%
+          </button>
           <button 
-            onClick={() => setScale(Math.min(2, scale + 0.1))}
-            className="p-2 hover:bg-gray-100 rounded"
+            onClick={() => setScale(Math.min(3, scale + 0.1))}
+            className="p-2 hover:bg-gray-100 rounded text-lg font-bold"
+            title="Zoom in (Ctrl + +)"
           >
             +
           </button>
         </div>
+
+        {/* Help tooltip */}
+        {showHelp && (
+          <div className="absolute top-4 right-4 bg-black bg-opacity-75 text-white text-xs rounded-lg p-3 max-w-xs">
+            <div className="flex justify-between items-start mb-2">
+              <span className="font-medium">Keyboard Shortcuts</span>
+              <button 
+                onClick={() => setShowHelp(false)}
+                className="text-white hover:text-gray-300 ml-2"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-1">
+              <div><strong>Scroll:</strong> Zoom in/out</div>
+              <div><strong>Middle Click + Drag:</strong> Pan canvas</div>
+              <div><strong>Delete:</strong> Remove selected element</div>
+              <div><strong>Escape:</strong> Deselect element</div>
+              <div><strong>+/- Keys:</strong> Zoom in/out</div>
+              <div><strong>Arrow Keys:</strong> Pan canvas</div>
+              <div><strong>Ctrl + 0:</strong> Reset zoom & center</div>
+            </div>
+          </div>
+        )}
+
+        {/* Show help button when help is hidden */}
+        {!showHelp && (
+          <button
+            onClick={() => setShowHelp(true)}
+            className="absolute top-4 right-4 bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 text-sm"
+            title="Show keyboard shortcuts"
+          >
+            ?
+          </button>
+        )}
       </div>
     </div>
   );
