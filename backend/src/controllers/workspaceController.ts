@@ -35,6 +35,21 @@ export const workspaceController = {
               avatarUrl: true
             }
           },
+          members: {
+            where: {
+              isActive: true
+            },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  avatarUrl: true
+                }
+              }
+            }
+          },
           _count: {
             select: {
               members: true,

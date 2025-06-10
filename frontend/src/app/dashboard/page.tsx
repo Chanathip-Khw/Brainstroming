@@ -50,15 +50,13 @@ export default function DashboardPage() {
           const mappedTeams = data.workspaces.map((workspace: any) => ({
             id: workspace.id,
             name: workspace.name,
-            members: [
-              { 
-                id: workspace.owner.id, 
-                name: workspace.owner.name, 
-                email: workspace.owner.email, 
-                avatar: workspace.owner.avatarUrl || '/api/placeholder/40/40' 
-              }
-            ],
-            memberCount: workspace._count?.members || 1, // Use actual member count from backend
+            members: workspace.members?.map((member: any) => ({
+              id: member.user.id,
+              name: member.user.name,
+              email: member.user.email,
+              avatar: member.user.avatarUrl || '/api/placeholder/40/40'
+            })) || [],
+            memberCount: workspace._count?.members || workspace.members?.length || 1,
             boards: [] // Boards will be fetched when needed
           }));
           setTeams(mappedTeams);
