@@ -58,6 +58,7 @@ export default function DashboardPage() {
                 avatar: workspace.owner.avatarUrl || '/api/placeholder/40/40' 
               }
             ],
+            memberCount: workspace._count?.members || 1, // Use actual member count from backend
             boards: [] // Boards will be fetched when needed
           }));
           setTeams(mappedTeams);
@@ -571,7 +572,7 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <h3 className="text-xl font-semibold text-gray-900">{team.name}</h3>
-                      <p className="text-sm text-gray-500">{team.members.length} members</p>
+                      <p className="text-sm text-gray-500">{team.memberCount || team.members.length} members</p>
                     </div>
                   </div>
                   
@@ -595,9 +596,9 @@ export default function DashboardPage() {
                         }}
                       />
                     ))}
-                    {team.members.length > 3 && (
+                    {(team.memberCount || team.members.length) > 3 && (
                       <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium text-gray-600">
-                        +{team.members.length - 3}
+                        +{(team.memberCount || team.members.length) - 3}
                       </div>
                     )}
                   </div>

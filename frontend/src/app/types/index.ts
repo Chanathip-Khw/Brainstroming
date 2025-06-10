@@ -10,6 +10,7 @@ export interface Team {
   id: string;
   name: string;
   members: User[];
+  memberCount?: number;
   boards: Board[];
 }
 
