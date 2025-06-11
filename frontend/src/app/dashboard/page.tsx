@@ -61,10 +61,10 @@ export default function DashboardPage() {
           }));
           setTeams(mappedTeams);
           
-          // If there are teams, fetch boards for the first team
-          if (mappedTeams.length > 0) {
-            fetchWorkspaceProjects(mappedTeams[0].id);
-          }
+          // Fetch boards for all workspaces
+          mappedTeams.forEach((team: Team) => {
+            fetchWorkspaceProjects(team.id);
+          });
         } else {
           console.error("Invalid workspace data format:", data);
           setTeams([]);
