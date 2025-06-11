@@ -391,7 +391,34 @@ export const projectController = {
           workspace: {
             select: {
               id: true,
-              name: true
+              name: true,
+              members: {
+                where: {
+                  isActive: true
+                },
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true,
+                      avatarUrl: true,
+                      isActive: true,
+                      lastLogin: true,
+                      sessions: {
+                        where: {
+                          isActive: true,
+                          expiresAt: { gt: new Date() }
+                        },
+                        select: {
+                          id: true,
+                          updatedAt: true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         }

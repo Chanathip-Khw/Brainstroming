@@ -16,6 +16,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const [showBoardSettings, setShowBoardSettings] = useState(false);
   const [boardName, setBoardName] = useState('Loading...');
   const [loading, setLoading] = useState(true);
+  const [workspaceMembers, setWorkspaceMembers] = useState<any[]>([]);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -41,6 +42,17 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
       .then(data => {
         if (data.success && data.project) {
           setBoardName(data.project.name);
+          // Extract workspace members if available
+          if (data.project.workspace?.members) {
+            setWorkspaceMembers(data.project.workspace.members.map((member: any) => ({
+              id: member.user.id,
+              name: member.user.name,
+              email: member.user.email,
+              avatar: member.user.avatarUrl || '/api/placeholder/32/32',
+              isActive: member.user.isActive,
+              lastLogin: member.user.lastLogin
+            })));
+          }
         } else {
           console.error('Failed to fetch board:', data.error);
           router.push('/dashboard');
@@ -57,6 +69,17 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const handleSaveBoardSettings = (settings: BoardSettings) => {
     console.log('Board settings saved:', settings);
     setBoardName(settings.boardName);
+  };
+
+  // Helper function to determine if a member is considered active
+  const isMemberActive = (member: any) => {
+    if (!member.isActive) return false;
+    
+    // Consider a user active if they've logged in within the last 30 minutes
+    const lastLoginTime = new Date(member.lastLogin).getTime();
+    const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000);
+    
+    return lastLoginTime > thirtyMinutesAgo;
   };
 
   if (status === 'loading' || loading) {
@@ -92,17 +115,36 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
 
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <img src="/api/placeholder/32/32" alt="Member" className="w-8 h-8 rounded-full border-2 border-green-400" />
-            <img src="/api/placeholder/32/32" alt="Member" className="w-8 h-8 rounded-full border-2 border-blue-400" />
-            <img 
-              src={user.avatar} 
-              alt={user.name} 
-              className="w-8 h-8 rounded-full border-2 border-yellow-400"
-              referrerPolicy="no-referrer"
-              onError={(e) => {
-                e.currentTarget.src = '/api/placeholder/32/32';
-              }}
-            />
+            {workspaceMembers.slice(0, 5).map((member, index) => {
+              const isActive = isMemberActive(member);
+              const memberStatus = isActive ? 'Active' : 'Inactive';
+              
+              return (
+                <div key={member.id} className="relative">
+                  <img 
+                    src={member.avatar} 
+                    alt={member.name} 
+                    title={`${member.name} (${memberStatus})`}
+                    className={`w-8 h-8 rounded-full border-2 transition-all duration-200 ${
+                      isActive ? 'border-green-400' : 'border-gray-300'
+                    }`}
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.src = '/api/placeholder/32/32';
+                    }}
+                  />
+                  {/* Status indicator dot */}
+                  <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 border-2 border-white rounded-full ${
+                    isActive ? 'bg-green-400' : 'bg-gray-400'
+                  }`}></div>
+                </div>
+              );
+            })}
+            {workspaceMembers.length > 5 && (
+              <div className="w-8 h-8 rounded-full border-2 border-gray-400 bg-gray-100 flex items-center justify-center text-xs font-medium text-gray-600">
+                +{workspaceMembers.length - 5}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

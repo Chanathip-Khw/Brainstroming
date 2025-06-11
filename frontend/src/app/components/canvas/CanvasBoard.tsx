@@ -13,6 +13,7 @@ interface CanvasElement {
   content: string;
   styleData: {
     color: string;
+    shapeType?: string;
     [key: string]: any;
   };
   createdBy: string;
@@ -44,10 +45,20 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [loading, setLoading] = useState(true);
   const [showHelp, setShowHelp] = useState(true);
+  const [selectedShape, setSelectedShape] = useState('circle');
 
   const colors = [
     '#fbbf24', '#3b82f6', '#10b981', '#ec4899', 
     '#8b5cf6', '#f97316', '#ef4444', '#6b7280'
+  ];
+
+  const shapes = [
+    { id: 'circle', name: 'Circle' },
+    { id: 'rectangle', name: 'Rectangle' },
+    { id: 'triangle', name: 'Triangle' },
+    { id: 'diamond', name: 'Diamond' },
+    { id: 'star', name: 'Star' },
+    { id: 'arrow', name: 'Arrow' }
   ];
 
   const tools = [
@@ -96,11 +107,33 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     }
   }, [session?.accessToken, projectId]);
 
-  // Create element on backend
+  // Create element with optimistic updates
   const createElement = async (elementData: Partial<CanvasElement>) => {
     if (!session?.accessToken || !projectId) return;
     
+    // Generate temporary ID for optimistic update
+    const tempId = `temp-${Date.now()}-${Math.random()}`;
+    
+    // Create optimistic element (show immediately)
+    const optimisticElement: CanvasElement = {
+      id: tempId,
+      type: elementData.type!,
+      positionX: elementData.positionX!,
+      positionY: elementData.positionY!,
+      width: elementData.width!,
+      height: elementData.height!,
+      content: elementData.content || '',
+      styleData: elementData.styleData!,
+      createdBy: user.id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    // Add to UI immediately (optimistic update)
+    setElements(prev => [...prev, optimisticElement]);
+    
     try {
+      // Send to backend in background
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${projectId}/elements`,
         {
@@ -125,7 +158,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       const data = await response.json();
       
       if (data.success) {
-        // Convert decimal positions to numbers for the new element
+        // Replace optimistic element with real element from backend
         const processedElement = {
           ...data.element,
           positionX: typeof data.element.positionX === 'string' ? parseFloat(data.element.positionX) : Number(data.element.positionX),
@@ -133,18 +166,34 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
           width: typeof data.element.width === 'string' ? parseFloat(data.element.width) : Number(data.element.width),
           height: typeof data.element.height === 'string' ? parseFloat(data.element.height) : Number(data.element.height)
         };
-        setElements(prev => [...prev, processedElement]);
+        
+        setElements(prev => prev.map(el => 
+          el.id === tempId ? processedElement : el
+        ));
       } else {
         console.error('Failed to create element:', data.error);
+        // Remove optimistic element on failure
+        setElements(prev => prev.filter(el => el.id !== tempId));
       }
     } catch (error) {
       console.error('Error creating element:', error);
+      // Remove optimistic element on error
+      setElements(prev => prev.filter(el => el.id !== tempId));
     }
   };
 
-  // Update element on backend
+  // Update element with optimistic updates
   const updateElement = async (elementId: string, updateData: Partial<CanvasElement>) => {
     if (!session?.accessToken || !projectId) return;
+    
+    // Store current state for potential rollback
+    const currentElement = elements.find(el => el.id === elementId);
+    if (!currentElement) return;
+    
+    // Apply optimistic update immediately
+    setElements(prev => prev.map(el => 
+      el.id === elementId ? { ...el, ...updateData } : el
+    ));
     
     try {
       const response = await fetch(
@@ -162,7 +211,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       const data = await response.json();
       
       if (data.success) {
-        // Convert decimal positions to numbers for the updated element
+        // Sync with backend response (in case backend modified the data)
         const processedElement = {
           ...data.element,
           positionX: typeof data.element.positionX === 'string' ? parseFloat(data.element.positionX) : Number(data.element.positionX),
@@ -175,15 +224,31 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
         ));
       } else {
         console.error('Failed to update element:', data.error);
+        // Rollback on failure
+        setElements(prev => prev.map(el => 
+          el.id === elementId ? currentElement : el
+        ));
       }
     } catch (error) {
       console.error('Error updating element:', error);
+      // Rollback on error
+      setElements(prev => prev.map(el => 
+        el.id === elementId ? currentElement : el
+      ));
     }
   };
 
-  // Delete element on backend
+  // Delete element with optimistic updates
   const deleteElement = async (elementId: string) => {
     if (!session?.accessToken || !projectId) return;
+    
+    // Store current element for potential restoration
+    const elementToDelete = elements.find(el => el.id === elementId);
+    if (!elementToDelete) return;
+    
+    // Remove element immediately (optimistic delete)
+    setElements(prev => prev.filter(el => el.id !== elementId));
+    setSelectedElement(null);
     
     try {
       const response = await fetch(
@@ -198,14 +263,16 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       
       const data = await response.json();
       
-      if (data.success) {
-        setElements(prev => prev.filter(el => el.id !== elementId));
-        setSelectedElement(null);
-      } else {
+      if (!data.success) {
         console.error('Failed to delete element:', data.error);
+        // Restore element on failure
+        setElements(prev => [...prev, elementToDelete]);
       }
+      // If successful, element is already removed from UI
     } catch (error) {
       console.error('Error deleting element:', error);
+      // Restore element on error
+      setElements(prev => [...prev, elementToDelete]);
     }
   };
 
@@ -215,28 +282,19 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   }, [fetchElements]);
 
   // Handle mouse wheel zoom
-  useEffect(() => {
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      
-      const zoomFactor = 0.1;
-      const delta = -e.deltaY;
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    
+    const zoomFactor = 0.1;
+    const delta = -e.deltaY;
+    
+    setScale(prevScale => {
       const newScale = delta > 0 
-        ? Math.min(3, scale + zoomFactor) 
-        : Math.max(0.3, scale - zoomFactor);
-      
-      setScale(newScale);
-    };
-
-    const canvasElement = canvasRef.current;
-    if (canvasElement) {
-      canvasElement.addEventListener('wheel', handleWheel, { passive: false });
-      
-      return () => {
-        canvasElement.removeEventListener('wheel', handleWheel);
-      };
-    }
-  }, [scale]);
+        ? Math.min(3, prevScale + zoomFactor) 
+        : Math.max(0.3, prevScale - zoomFactor);
+      return newScale;
+    });
+  };
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -315,6 +373,11 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       return;
     }
 
+    if (tool === 'move') {
+      // Pan tool doesn't create elements, just pans
+      return;
+    }
+
     if (['STICKY_NOTE', 'TEXT', 'SHAPE'].includes(tool)) {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect) {
@@ -325,10 +388,13 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
           type: tool as 'STICKY_NOTE' | 'TEXT' | 'SHAPE',
           positionX: x,
           positionY: y,
-          width: tool === 'TEXT' ? 300 : 200,
-          height: tool === 'TEXT' ? 50 : 150,
-          content: tool === 'STICKY_NOTE' ? 'New idea...' : tool === 'TEXT' ? 'Type here...' : '',
-          styleData: { color: selectedColor }
+          width: tool === 'TEXT' ? 200 : 150,
+          height: tool === 'TEXT' ? 30 : 150,
+          content: tool === 'STICKY_NOTE' ? 'New idea...' : tool === 'TEXT' ? 'Text' : '',
+          styleData: { 
+            color: selectedColor,
+            ...(tool === 'SHAPE' && { shapeType: selectedShape })
+          }
         };
         
         createElement(newElement);
@@ -355,9 +421,17 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
   const handleTextSubmit = () => {
     if (editingElement) {
-      updateElement(editingElement, { content: editingText });
+      // Apply text change immediately to UI
+      setElements(prev => prev.map(el => 
+        el.id === editingElement ? { ...el, content: editingText } : el
+      ));
+      
+      // Exit editing mode immediately
       setEditingElement(null);
       setEditingText('');
+      
+      // Sync with backend in background
+      updateElement(editingElement, { content: editingText });
     }
   };
 
@@ -426,7 +500,15 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    // Middle mouse button for panning
+    // Pan with left click when move tool is selected
+    if (tool === 'move' && e.button === 0) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ x: e.clientX, y: e.clientY });
+      return;
+    }
+    
+    // Middle mouse button for panning (always available)
     if (e.button === 1) {
       e.preventDefault();
       setIsPanning(true);
@@ -450,6 +532,112 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     };
     
     return colorMap[color] || 'bg-yellow-200';
+  };
+
+  const renderShape = (element: CanvasElement) => {
+    const shapeType = element.styleData?.shapeType || 'circle';
+    const color = element.styleData?.color || '#fbbf24';
+    const width = element.width;
+    const height = element.height;
+
+    const commonProps = {
+      fill: color,
+      stroke: selectedElement === element.id ? '#6366f1' : color,
+      strokeWidth: selectedElement === element.id ? 2 : 0,
+    };
+
+    switch (shapeType) {
+      case 'circle':
+        return (
+          <svg width={width} height={height} className="pointer-events-none">
+            <ellipse
+              cx={width / 2}
+              cy={height / 2}
+              rx={width / 2 - 2}
+              ry={height / 2 - 2}
+              {...commonProps}
+            />
+          </svg>
+        );
+      
+      case 'rectangle':
+        return (
+          <svg width={width} height={height} className="pointer-events-none">
+            <rect
+              x="2"
+              y="2"
+              width={width - 4}
+              height={height - 4}
+              rx="4"
+              {...commonProps}
+            />
+          </svg>
+        );
+      
+      case 'triangle':
+        return (
+          <svg width={width} height={height} className="pointer-events-none">
+            <polygon
+              points={`${width/2},4 ${width-4},${height-4} 4,${height-4}`}
+              {...commonProps}
+            />
+          </svg>
+        );
+      
+      case 'diamond':
+        return (
+          <svg width={width} height={height} className="pointer-events-none">
+            <polygon
+              points={`${width/2},4 ${width-4},${height/2} ${width/2},${height-4} 4,${height/2}`}
+              {...commonProps}
+            />
+          </svg>
+        );
+      
+      case 'star':
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const outerRadius = Math.min(width, height) / 2 - 4;
+        const innerRadius = outerRadius * 0.4;
+        let points = '';
+        
+        for (let i = 0; i < 10; i++) {
+          const angle = (i * Math.PI) / 5;
+          const radius = i % 2 === 0 ? outerRadius : innerRadius;
+          const x = centerX + radius * Math.cos(angle - Math.PI / 2);
+          const y = centerY + radius * Math.sin(angle - Math.PI / 2);
+          points += `${x},${y} `;
+        }
+        
+        return (
+          <svg width={width} height={height} className="pointer-events-none">
+            <polygon points={points.trim()} {...commonProps} />
+          </svg>
+        );
+      
+      case 'arrow':
+        return (
+          <svg width={width} height={height} className="pointer-events-none">
+            <polygon
+              points={`4,${height/2} ${width*0.7},4 ${width*0.7},${height*0.3} ${width-4},${height/2} ${width*0.7},${height*0.7} ${width*0.7},${height-4}`}
+              {...commonProps}
+            />
+          </svg>
+        );
+      
+      default:
+        return (
+          <svg width={width} height={height} className="pointer-events-none">
+            <ellipse
+              cx={width / 2}
+              cy={height / 2}
+              rx={width / 2 - 2}
+              ry={height / 2 - 2}
+              {...commonProps}
+            />
+          </svg>
+        );
+    }
   };
 
   if (loading) {
@@ -499,30 +687,61 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
           </div>
         </div>
 
+        {tool === 'SHAPE' && (
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">Shapes</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {shapes.map((shape) => (
+                <button
+                  key={shape.id}
+                  onClick={() => setSelectedShape(shape.id)}
+                  className={`p-2 rounded-lg border-2 text-xs font-medium transition-colors ${
+                    selectedShape === shape.id 
+                      ? 'border-indigo-500 bg-indigo-50 text-indigo-700' 
+                      : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {shape.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {selectedElement && (
           <div>
             <h3 className="text-sm font-medium text-gray-700 mb-3">Selected Element</h3>
             <div className="space-y-2">
-              <button
-                onClick={() => {
-                  const element = elements.find(el => el.id === selectedElement);
-                  if (element) {
-                    setEditingElement(selectedElement);
-                    setEditingText(element.content || '');
-                  }
-                }}
-                className="w-full p-2 text-left text-sm bg-gray-100 hover:bg-gray-200 rounded flex items-center gap-2"
-              >
-                <Edit3 className="w-4 h-4" />
-                Edit Text
-              </button>
-              <button
-                onClick={() => deleteElement(selectedElement)}
-                className="w-full p-2 text-left text-sm bg-red-100 text-red-700 hover:bg-red-200 rounded flex items-center gap-2"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete
-              </button>
+              {(() => {
+                const element = elements.find(el => el.id === selectedElement);
+                const hasEditableText = element && (element.type === 'TEXT' || element.type === 'STICKY_NOTE');
+                
+                return (
+                  <>
+                    {hasEditableText && (
+                      <button
+                        onClick={() => {
+                          if (element) {
+                            setEditingElement(selectedElement);
+                            setEditingText(element.content || '');
+                          }
+                        }}
+                        className="w-full p-2 text-left text-sm bg-gray-100 hover:bg-gray-200 rounded flex items-center gap-2"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                        Edit Text
+                      </button>
+                    )}
+                    <button
+                      onClick={() => deleteElement(selectedElement)}
+                      className="w-full p-2 text-left text-sm bg-red-100 text-red-700 hover:bg-red-200 rounded flex items-center gap-2"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </button>
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -534,13 +753,14 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
           className={`w-full h-full relative ${
             isPanning ? 'cursor-grabbing' :
             tool === 'select' ? 'cursor-default' :
-            tool === 'move' ? 'cursor-move' :
+            tool === 'move' ? 'cursor-grab' :
             'cursor-crosshair'
           }`}
           onClick={handleCanvasClick}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
+          onWheel={handleWheel}
           onContextMenu={(e) => e.preventDefault()} // Prevent right-click menu
           style={{
             transform: `scale(${scale}) translate(${panX}px, ${panY}px)`,
@@ -561,46 +781,90 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
           {elements.map((element) => (
             <div
               key={element.id}
-              className={`absolute cursor-pointer select-none ${getElementColor(element)} p-3 rounded-lg shadow-sm flex flex-col justify-between ${
-                selectedElement === element.id ? 'ring-2 ring-indigo-500' : ''
+              className={`absolute cursor-pointer select-none ${
+                element.type === 'TEXT' 
+                  ? `text-gray-800 ${selectedElement === element.id ? 'ring-2 ring-indigo-500 bg-white bg-opacity-20 rounded' : ''}` 
+                  : element.type === 'SHAPE'
+                  ? `${selectedElement === element.id ? 'ring-2 ring-indigo-500 rounded' : ''}`
+                  : `${getElementColor(element)} p-3 rounded-lg shadow-sm flex flex-col justify-between ${selectedElement === element.id ? 'ring-2 ring-indigo-500' : ''}`
               }`}
               style={{
                 left: `${element.positionX}px`,
                 top: `${element.positionY}px`,
-                width: `${element.width}px`,
-                height: `${element.height}px`,
-                transform: 'translate(-50%, -50%)'
+                width: element.type === 'TEXT' ? 'auto' : `${element.width}px`,
+                height: element.type === 'TEXT' ? 'auto' : `${element.height}px`,
+                transform: 'translate(-50%, -50%)',
+                fontSize: element.type === 'TEXT' ? '16px' : undefined,
+                fontWeight: element.type === 'TEXT' ? '500' : undefined,
+                color: element.type === 'TEXT' ? element.styleData?.color || '#374151' : undefined,
+                minWidth: element.type === 'TEXT' ? '100px' : undefined
               }}
               onClick={(e) => handleElementClick(element.id, e)}
               onDoubleClick={(e) => handleElementDoubleClick(element.id, e)}
               onMouseDown={(e) => handleElementMouseDown(element.id, e)}
             >
-              {editingElement === element.id ? (
-                <textarea
-                  value={editingText}
-                  onChange={(e) => setEditingText(e.target.value)}
-                  onBlur={handleTextSubmit}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleTextSubmit();
-                    }
-                  }}
-                  className="w-full h-full resize-none border-none outline-none bg-transparent text-sm"
-                  autoFocus
-                />
+              {element.type === 'TEXT' ? (
+                // Text element rendering
+                editingElement === element.id ? (
+                  <input
+                    type="text"
+                    value={editingText}
+                    onChange={(e) => setEditingText(e.target.value)}
+                    onBlur={handleTextSubmit}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleTextSubmit();
+                      }
+                    }}
+                    className="border-none outline-none bg-transparent text-inherit font-inherit"
+                    style={{ 
+                      fontSize: 'inherit',
+                      fontWeight: 'inherit',
+                      color: 'inherit',
+                      width: '100%'
+                    }}
+                    autoFocus
+                  />
+                ) : (
+                  <span>
+                    {element.content || 'Click to edit...'}
+                  </span>
+                )
+              ) : element.type === 'SHAPE' ? (
+                // Shape element rendering
+                renderShape(element)
               ) : (
-                <div className="text-sm text-gray-800 mb-2 flex-1 overflow-hidden">
-                  {element.content || 'Click to edit...'}
-                </div>
+                // Non-text element rendering (sticky notes, shapes)
+                <>
+                  {editingElement === element.id ? (
+                    <textarea
+                      value={editingText}
+                      onChange={(e) => setEditingText(e.target.value)}
+                      onBlur={handleTextSubmit}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleTextSubmit();
+                        }
+                      }}
+                      className="w-full h-full resize-none border-none outline-none bg-transparent text-sm"
+                      autoFocus
+                    />
+                  ) : (
+                    <div className="text-sm text-gray-800 mb-2 flex-1 overflow-hidden">
+                      {element.content || 'Click to edit...'}
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center justify-between text-xs text-gray-600 mt-auto">
+                    <span className="truncate">
+                      {element.createdBy === user.id ? 'You' : 'User'}
+                    </span>
+                    <span>{new Date(element.createdAt).toLocaleDateString()}</span>
+                  </div>
+                </>
               )}
-              
-              <div className="flex items-center justify-between text-xs text-gray-600 mt-auto">
-                <span className="truncate">
-                  {element.createdBy === user.id ? 'You' : 'User'}
-                </span>
-                <span>{new Date(element.createdAt).toLocaleDateString()}</span>
-              </div>
             </div>
           ))}
         </div>
