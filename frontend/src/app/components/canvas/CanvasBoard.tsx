@@ -278,19 +278,6 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
         }
       }
       
-      // Alternative zoom shortcuts without Ctrl
-      if (e.key === '=' || e.key === '+') {
-        if (!e.ctrlKey && !e.metaKey) {
-          e.preventDefault();
-          setScale(prev => Math.min(3, prev + 0.1));
-        }
-      } else if (e.key === '-') {
-        if (!e.ctrlKey && !e.metaKey) {
-          e.preventDefault();
-          setScale(prev => Math.max(0.3, prev - 0.1));
-        }
-      }
-      
       // Pan with arrow keys
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         if (!selectedElement) { // Only pan if no element is selected
