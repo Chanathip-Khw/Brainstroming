@@ -390,7 +390,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
           positionY: y,
           width: tool === 'TEXT' ? 200 : 150,
           height: tool === 'TEXT' ? 30 : 150,
-          content: tool === 'STICKY_NOTE' ? 'New idea...' : tool === 'TEXT' ? 'Text' : '',
+          content: tool === 'STICKY_NOTE' ? '' : tool === 'TEXT' ? '' : '',
           styleData: { 
             color: selectedColor,
             ...(tool === 'SHAPE' && { shapeType: selectedShape })
@@ -398,6 +398,8 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
         };
         
         createElement(newElement);
+        // Automatically switch to select tool after placing an element
+        setTool('select');
       }
     }
   };
@@ -532,6 +534,12 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     };
     
     return colorMap[color] || 'bg-yellow-200';
+  };
+
+  // Helper function to create placeholder color with opacity
+  const getPlaceholderColor = (element: CanvasElement) => {
+    const color = element.styleData?.color || '#fbbf24';
+    return color + '80'; // Add 50% opacity (80 in hex)
   };
 
   const renderShape = (element: CanvasElement) => {
@@ -828,7 +836,14 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                   />
                 ) : (
                   <span>
-                    {element.content || 'Click to edit...'}
+                    {element.content || (
+                      <span 
+                        className="italic"
+                        style={{ color: getPlaceholderColor(element) }}
+                      >
+                        Add your text...
+                      </span>
+                    )}
                   </span>
                 )
               ) : element.type === 'SHAPE' ? (
@@ -853,16 +868,16 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                     />
                   ) : (
                     <div className="text-sm text-gray-800 mb-2 flex-1 overflow-hidden">
-                      {element.content || 'Click to edit...'}
+                      {element.content || (
+                        <span 
+                          className="italic"
+                          style={{ color: getPlaceholderColor(element) }}
+                        >
+                          {element.type === 'STICKY_NOTE' ? 'Add your idea...' : 'Click to edit...'}
+                        </span>
+                      )}
                     </div>
                   )}
-                  
-                  <div className="flex items-center justify-between text-xs text-gray-600 mt-auto">
-                    <span className="truncate">
-                      {element.createdBy === user.id ? 'You' : 'User'}
-                    </span>
-                    <span>{new Date(element.createdAt).toLocaleDateString()}</span>
-                  </div>
                 </>
               )}
             </div>

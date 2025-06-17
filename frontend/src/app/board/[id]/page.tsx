@@ -50,7 +50,8 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
               email: member.user.email,
               avatar: member.user.avatarUrl || '/api/placeholder/32/32',
               isActive: member.user.isActive,
-              lastLogin: member.user.lastLogin
+              lastLogin: member.user.lastLogin,
+              activeSessions: member.user.sessions || []
             })));
           }
         } else {
@@ -75,11 +76,23 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const isMemberActive = (member: any) => {
     if (!member.isActive) return false;
     
-    // Consider a user active if they've logged in within the last 30 minutes
-    const lastLoginTime = new Date(member.lastLogin).getTime();
-    const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000);
+    // Check if user has any active sessions (most reliable indicator)
+    if (member.activeSessions && member.activeSessions.length > 0) {
+      // Check if any session was updated recently (within last 2 hours)
+      const twoHoursAgo = Date.now() - (2 * 60 * 60 * 1000);
+      const hasRecentActivity = member.activeSessions.some((session: any) => {
+        const sessionUpdateTime = new Date(session.updatedAt).getTime();
+        return sessionUpdateTime > twoHoursAgo;
+      });
+      
+      if (hasRecentActivity) return true;
+    }
     
-    return lastLoginTime > thirtyMinutesAgo;
+    // Fallback: check last login time (within 24 hours for long sessions)
+    const lastLoginTime = new Date(member.lastLogin).getTime();
+    const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
+    
+    return lastLoginTime > twentyFourHoursAgo;
   };
 
   if (status === 'loading' || loading) {
