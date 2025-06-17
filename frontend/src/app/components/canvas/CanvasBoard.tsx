@@ -462,9 +462,140 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     }
   };
 
+  const handleResizeMouseDown = (elementId: string, handle: string, e: React.MouseEvent) => {
+    if (tool !== 'select') return;
+    
+    e.stopPropagation();
+    const element = elements.find(el => el.id === elementId);
+    if (!element) return;
+
+    setSelectedElement(elementId);
+    setIsResizing(true);
+    setResizeHandle(handle);
+    
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      const x = (e.clientX - rect.left - panX) / scale;
+      const y = (e.clientY - rect.top - panY) / scale;
+      
+      setResizeStart({
+        x,
+        y,
+        width: element.width,
+        height: element.height
+      });
+    }
+  };
+
   const handleMouseMove = (e: React.MouseEvent) => {
+    // Handle element resizing
+    if (isResizing && selectedElement && resizeHandle) {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect) {
+        const currentX = (e.clientX - rect.left - panX) / scale;
+        const currentY = (e.clientY - rect.top - panY) / scale;
+        
+        const deltaX = currentX - resizeStart.x;
+        const deltaY = currentY - resizeStart.y;
+        
+        let newWidth = resizeStart.width;
+        let newHeight = resizeStart.height;
+        let newX: number | undefined;
+        let newY: number | undefined;
+        
+        const element = elements.find(el => el.id === selectedElement);
+        if (!element) return;
+        
+        // Calculate original aspect ratio
+        const aspectRatio = resizeStart.width / resizeStart.height;
+        
+        // Calculate new dimensions and position adjustments
+        // Since elements are centered (transform: translate(-50%, -50%)), 
+        // we need to adjust position by half the size change
+        switch (resizeHandle) {
+          case 'se': // Bottom-right corner - maintain aspect ratio
+            const seScale = Math.max(
+              Math.abs(deltaX) / resizeStart.width,
+              Math.abs(deltaY) / resizeStart.height
+            );
+            const seDirection = deltaX > 0 || deltaY > 0 ? 1 : -1;
+            newWidth = Math.max(50, resizeStart.width + (resizeStart.width * seScale * seDirection));
+            newHeight = Math.max(30, newWidth / aspectRatio);
+            break;
+          case 'sw': // Bottom-left corner - maintain aspect ratio
+            const swScale = Math.max(
+              Math.abs(deltaX) / resizeStart.width,
+              Math.abs(deltaY) / resizeStart.height
+            );
+            const swDirection = deltaX < 0 || deltaY > 0 ? 1 : -1;
+            newWidth = Math.max(50, resizeStart.width + (resizeStart.width * swScale * swDirection));
+            newHeight = Math.max(30, newWidth / aspectRatio);
+            if (newWidth !== element.width) {
+              newX = element.positionX - (newWidth - element.width) / 2;
+            }
+            break;
+          case 'ne': // Top-right corner - maintain aspect ratio
+            const neScale = Math.max(
+              Math.abs(deltaX) / resizeStart.width,
+              Math.abs(deltaY) / resizeStart.height
+            );
+            const neDirection = deltaX > 0 || deltaY < 0 ? 1 : -1;
+            newWidth = Math.max(50, resizeStart.width + (resizeStart.width * neScale * neDirection));
+            newHeight = Math.max(30, newWidth / aspectRatio);
+            if (newHeight !== element.height) {
+              newY = element.positionY - (newHeight - element.height) / 2;
+            }
+            break;
+          case 'nw': // Top-left corner - maintain aspect ratio
+            const nwScale = Math.max(
+              Math.abs(deltaX) / resizeStart.width,
+              Math.abs(deltaY) / resizeStart.height
+            );
+            const nwDirection = deltaX < 0 || deltaY < 0 ? 1 : -1;
+            newWidth = Math.max(50, resizeStart.width + (resizeStart.width * nwScale * nwDirection));
+            newHeight = Math.max(30, newWidth / aspectRatio);
+            if (newWidth !== element.width) {
+              newX = element.positionX - (newWidth - element.width) / 2;
+            }
+            if (newHeight !== element.height) {
+              newY = element.positionY - (newHeight - element.height) / 2;
+            }
+            break;
+          case 'e': // Right edge - no position change needed
+            newWidth = Math.max(50, resizeStart.width + deltaX);
+            break;
+          case 'w': // Left edge - adjust X position
+            newWidth = Math.max(50, resizeStart.width - deltaX);
+            if (newWidth !== element.width) {
+              newX = element.positionX - (newWidth - element.width) / 2;
+            }
+            break;
+          case 'n': // Top edge - adjust Y position
+            newHeight = Math.max(30, resizeStart.height - deltaY);
+            if (newHeight !== element.height) {
+              newY = element.positionY - (newHeight - element.height) / 2;
+            }
+            break;
+          case 's': // Bottom edge - no position change needed
+            newHeight = Math.max(30, resizeStart.height + deltaY);
+            break;
+        }
+        
+        setElements(prev => prev.map(el => 
+          el.id === selectedElement 
+            ? { 
+                ...el, 
+                width: newWidth, 
+                height: newHeight,
+                ...(newX !== undefined && { positionX: newX }),
+                ...(newY !== undefined && { positionY: newY })
+              }
+            : el
+        ));
+      }
+    }
     // Handle element dragging
-    if (isDragging && selectedElement && !isPanning) {
+    else if (isDragging && selectedElement && !isPanning && !isResizing) {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect) {
         const x = (e.clientX - rect.left - panX) / scale - dragOffset.x;
@@ -491,7 +622,17 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   };
 
   const handleMouseUp = (e?: React.MouseEvent) => {
-    if (isDragging && selectedElement) {
+    if (isResizing && selectedElement) {
+      const element = elements.find(el => el.id === selectedElement);
+      if (element) {
+        updateElement(selectedElement, {
+          width: element.width,
+          height: element.height,
+          positionX: element.positionX,
+          positionY: element.positionY
+        });
+      }
+    } else if (isDragging && selectedElement) {
       const element = elements.find(el => el.id === selectedElement);
       if (element) {
         updateElement(selectedElement, {
@@ -502,6 +643,8 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     }
     setIsDragging(false);
     setIsPanning(false);
+    setIsResizing(false);
+    setResizeHandle(null);
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -543,6 +686,32 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   const getPlaceholderColor = (element: CanvasElement) => {
     const color = element.styleData?.color || '#fbbf24';
     return color + '80'; // Add 50% opacity (80 in hex)
+  };
+
+  // Render resize handles for selected element
+  const renderResizeHandles = (element: CanvasElement) => {
+    if (selectedElement !== element.id) return null;
+    
+    // All elements get the same 8 resize handles
+    const handles = [
+      { id: 'nw', style: { top: '-4px', left: '-4px', cursor: 'nw-resize' } },
+      { id: 'n', style: { top: '-4px', left: '50%', transform: 'translateX(-50%)', cursor: 'n-resize' } },
+      { id: 'ne', style: { top: '-4px', right: '-4px', cursor: 'ne-resize' } },
+      { id: 'e', style: { top: '50%', right: '-4px', transform: 'translateY(-50%)', cursor: 'e-resize' } },
+      { id: 'se', style: { bottom: '-4px', right: '-4px', cursor: 'se-resize' } },
+      { id: 's', style: { bottom: '-4px', left: '50%', transform: 'translateX(-50%)', cursor: 's-resize' } },
+      { id: 'sw', style: { bottom: '-4px', left: '-4px', cursor: 'sw-resize' } },
+      { id: 'w', style: { top: '50%', left: '-4px', transform: 'translateY(-50%)', cursor: 'w-resize' } }
+    ];
+
+    return handles.map(handle => (
+      <div
+        key={handle.id}
+        className="absolute w-2 h-2 bg-indigo-500 border border-white rounded-sm hover:bg-indigo-600 transition-colors"
+        style={handle.style}
+        onMouseDown={(e) => handleResizeMouseDown(element.id, handle.id, e)}
+      />
+    ));
   };
 
   const renderShape = (element: CanvasElement) => {
@@ -806,13 +975,13 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
               style={{
                 left: `${element.positionX}px`,
                 top: `${element.positionY}px`,
-                width: element.type === 'TEXT' ? 'auto' : `${element.width}px`,
-                height: element.type === 'TEXT' ? 'auto' : `${element.height}px`,
+                width: `${element.width}px`,
+                height: `${element.height}px`,
                 transform: 'translate(-50%, -50%)',
                 fontSize: element.type === 'TEXT' ? '16px' : undefined,
                 fontWeight: element.type === 'TEXT' ? '500' : undefined,
                 color: element.type === 'TEXT' ? element.styleData?.color || '#374151' : undefined,
-                minWidth: element.type === 'TEXT' ? '100px' : undefined
+                minHeight: element.type === 'TEXT' ? '30px' : undefined
               }}
               onClick={(e) => handleElementClick(element.id, e)}
               onDoubleClick={(e) => handleElementDoubleClick(element.id, e)}
@@ -837,12 +1006,20 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                       fontSize: 'inherit',
                       fontWeight: 'inherit',
                       color: 'inherit',
-                      width: '100%'
+                      width: '100%',
+                      resize: 'none'
                     }}
                     autoFocus
                   />
                 ) : (
-                  <span>
+                  <div 
+                    className="w-full h-full flex items-center justify-center overflow-hidden p-2"
+                    style={{ 
+                      wordWrap: 'break-word',
+                      lineHeight: '1.4',
+                      textAlign: 'center'
+                    }}
+                  >
                     {element.content || (
                       <span 
                         className="italic"
@@ -851,7 +1028,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                         Add your text...
                       </span>
                     )}
-                  </span>
+                  </div>
                 )
               ) : element.type === 'SHAPE' ? (
                 // Shape element rendering
@@ -887,6 +1064,8 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                   )}
                 </>
               )}
+              {/* Resize handles */}
+              {renderResizeHandles(element)}
             </div>
           ))}
         </div>
