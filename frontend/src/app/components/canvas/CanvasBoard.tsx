@@ -46,6 +46,9 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   const [loading, setLoading] = useState(true);
   const [showHelp, setShowHelp] = useState(true);
   const [selectedShape, setSelectedShape] = useState('circle');
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeHandle, setResizeHandle] = useState<string | null>(null);
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
 
   const colors = [
     '#fbbf24', '#3b82f6', '#10b981', '#ec4899', 
@@ -340,7 +343,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         if (!selectedElement) { // Only pan if no element is selected
           e.preventDefault();
-          const panAmount = 50;
+          const panAmount = e.shiftKey ? 200 : 100; // Faster panning with Shift
           
           switch (e.key) {
             case 'ArrowUp':
@@ -776,8 +779,12 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
           }}
         >
           <div 
-            className="absolute inset-0 opacity-10"
+            className="absolute opacity-10"
             style={{
+              left: '-50000px',
+              top: '-50000px',
+              width: '100000px',
+              height: '100000px',
               backgroundImage: `
                 linear-gradient(to right, #000 1px, transparent 1px),
                 linear-gradient(to bottom, #000 1px, transparent 1px)
