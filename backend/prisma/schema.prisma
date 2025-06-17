@@ -11,7 +11,7 @@ generator erd {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -130,10 +130,10 @@ model User {
 model UserSession {
   id           String    @id @default(cuid())
   userId       String    @map("user_id")
-  accessToken  String?   @map("access_token") @db.Text
-  refreshToken String?   @map("refresh_token") @db.Text
+  accessToken  String?   @map("access_token")
+  refreshToken String?   @map("refresh_token")
   expiresAt    DateTime? @map("expires_at")
-  userAgent    String?   @map("user_agent") @db.Text
+  userAgent    String?   @map("user_agent")
   ipAddress    String?   @map("ip_address")
   isActive     Boolean   @default(true) @map("is_active")
   createdAt    DateTime  @default(now()) @map("created_at")
@@ -149,8 +149,8 @@ model UserSession {
 
 model Workspace {
   id          String    @id @default(cuid())
-  name        String    @db.VarChar(255)
-  description String?   @db.Text
+  name        String
+  description String?
   ownerId     String    @map("owner_id")
   settings    Json?
   isPublic    Boolean   @default(false) @map("is_public")
@@ -218,10 +218,10 @@ model WorkspaceInvite {
 model Project {
   id          String    @id @default(cuid())
   workspaceId String    @map("workspace_id")
-  name        String    @db.VarChar(255)
-  description String?   @db.Text
+  name        String
+  description String?
   canvasData  Json?     @map("canvas_data")
-  thumbnail   String?   @db.Text
+  thumbnail   String?
   isTemplate  Boolean   @default(false) @map("is_template")
   isPublic    Boolean   @default(false) @map("is_public")
   isActive    Boolean   @default(true) @map("is_active")
@@ -247,8 +247,8 @@ model Project {
 model BrainstormSession {
   id          String        @id @default(cuid())
   projectId   String        @map("project_id")
-  name        String        @db.VarChar(255)
-  description String?       @db.Text
+  name        String
+  description String?
   status      SessionStatus @default(ACTIVE)
   startTime   DateTime?     @map("start_time")
   endTime     DateTime?     @map("end_time")
@@ -269,12 +269,12 @@ model CanvasElement {
   id        String            @id @default(cuid())
   projectId String            @map("project_id")
   type      CanvasElementType
-  content   String?           @db.Text
-  positionX Decimal          @map("position_x") @db.Decimal(10, 2)
-  positionY Decimal          @map("position_y") @db.Decimal(10, 2)
-  width     Decimal?         @db.Decimal(10, 2)
-  height    Decimal?         @db.Decimal(10, 2)
-  rotation  Decimal?         @db.Decimal(5, 2) @default(0)
+  content   String?
+  positionX Decimal          @map("position_x")
+  positionY Decimal          @map("position_y")
+  width     Decimal?
+  height    Decimal?
+  rotation  Decimal?         @default(0)
   zIndex    Int              @default(0) @map("z_index")
   styleData Json?            @map("style_data")
   locked    Boolean          @default(false)
@@ -320,7 +320,7 @@ model Comment {
   id          String   @id @default(cuid())
   elementId   String   @map("element_id")
   userId      String   @map("user_id")
-  content     String   @db.Text
+  content     String
   isResolved  Boolean  @default(false) @map("is_resolved")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -357,9 +357,9 @@ model Vote {
 model Category {
   id          String    @id @default(cuid())
   projectId   String    @map("project_id")
-  name        String    @db.VarChar(255)
-  color       String?   @db.VarChar(7)
-  description String?   @db.Text
+  name        String
+  color       String?
+  description String?
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
