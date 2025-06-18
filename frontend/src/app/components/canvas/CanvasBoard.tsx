@@ -737,78 +737,99 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
         const element = elements.find(el => el.id === selectedElement);
         if (!element) return;
         
-        // Calculate original aspect ratio
-        const aspectRatio = resizeStart.width / resizeStart.height;
+        // Calculate the fixed anchor point based on resize handle
+        // Elements are centered, so we need to calculate the absolute corners first
+        const currentLeft = element.positionX - element.width / 2;
+        const currentRight = element.positionX + element.width / 2;
+        const currentTop = element.positionY - element.height / 2;
+        const currentBottom = element.positionY + element.height / 2;
         
-        // Calculate new dimensions and position adjustments
-        // Since elements are centered (transform: translate(-50%, -50%)), 
-        // we need to adjust position by half the size change
+        let fixedLeft = currentLeft;
+        let fixedRight = currentRight;
+        let fixedTop = currentTop;
+        let fixedBottom = currentBottom;
+        
+        // Determine which edges are fixed based on the resize handle
         switch (resizeHandle) {
-          case 'se': // Bottom-right corner - maintain aspect ratio
-            const seScale = Math.max(
-              Math.abs(deltaX) / resizeStart.width,
-              Math.abs(deltaY) / resizeStart.height
-            );
-            const seDirection = deltaX > 0 || deltaY > 0 ? 1 : -1;
-            newWidth = Math.max(50, resizeStart.width + (resizeStart.width * seScale * seDirection));
-            newHeight = Math.max(30, newWidth / aspectRatio);
+          case 'se': // Southeast: fix NW corner (top-left)
+            fixedLeft = currentLeft;
+            fixedTop = currentTop;
+            newWidth = Math.max(50, currentX - fixedLeft);
+            newHeight = Math.max(30, currentY - fixedTop);
             break;
-          case 'sw': // Bottom-left corner - maintain aspect ratio
-            const swScale = Math.max(
-              Math.abs(deltaX) / resizeStart.width,
-              Math.abs(deltaY) / resizeStart.height
-            );
-            const swDirection = deltaX < 0 || deltaY > 0 ? 1 : -1;
-            newWidth = Math.max(50, resizeStart.width + (resizeStart.width * swScale * swDirection));
-            newHeight = Math.max(30, newWidth / aspectRatio);
-            if (newWidth !== element.width) {
-              newX = element.positionX - (newWidth - element.width) / 2;
-            }
+          case 'sw': // Southwest: fix NE corner (top-right)
+            fixedRight = currentRight;
+            fixedTop = currentTop;
+            newWidth = Math.max(50, fixedRight - currentX);
+            newHeight = Math.max(30, currentY - fixedTop);
             break;
-          case 'ne': // Top-right corner - maintain aspect ratio
-            const neScale = Math.max(
-              Math.abs(deltaX) / resizeStart.width,
-              Math.abs(deltaY) / resizeStart.height
-            );
-            const neDirection = deltaX > 0 || deltaY < 0 ? 1 : -1;
-            newWidth = Math.max(50, resizeStart.width + (resizeStart.width * neScale * neDirection));
-            newHeight = Math.max(30, newWidth / aspectRatio);
-            if (newHeight !== element.height) {
-              newY = element.positionY - (newHeight - element.height) / 2;
-            }
+          case 'ne': // Northeast: fix SW corner (bottom-left)
+            fixedLeft = currentLeft;
+            fixedBottom = currentBottom;
+            newWidth = Math.max(50, currentX - fixedLeft);
+            newHeight = Math.max(30, fixedBottom - currentY);
             break;
-          case 'nw': // Top-left corner - maintain aspect ratio
-            const nwScale = Math.max(
-              Math.abs(deltaX) / resizeStart.width,
-              Math.abs(deltaY) / resizeStart.height
-            );
-            const nwDirection = deltaX < 0 || deltaY < 0 ? 1 : -1;
-            newWidth = Math.max(50, resizeStart.width + (resizeStart.width * nwScale * nwDirection));
-            newHeight = Math.max(30, newWidth / aspectRatio);
-            if (newWidth !== element.width) {
-              newX = element.positionX - (newWidth - element.width) / 2;
-            }
-            if (newHeight !== element.height) {
-              newY = element.positionY - (newHeight - element.height) / 2;
-            }
+          case 'nw': // Northwest: fix SE corner (bottom-right)
+            fixedRight = currentRight;
+            fixedBottom = currentBottom;
+            newWidth = Math.max(50, fixedRight - currentX);
+            newHeight = Math.max(30, fixedBottom - currentY);
             break;
-          case 'e': // Right edge - no position change needed
-            newWidth = Math.max(50, resizeStart.width + deltaX);
+          case 'e': // East: fix left edge
+            fixedLeft = currentLeft;
+            newWidth = Math.max(50, currentX - fixedLeft);
+            newHeight = element.height; // Keep height unchanged
             break;
-          case 'w': // Left edge - adjust X position
-            newWidth = Math.max(50, resizeStart.width - deltaX);
-            if (newWidth !== element.width) {
-              newX = element.positionX - (newWidth - element.width) / 2;
-            }
+          case 'w': // West: fix right edge
+            fixedRight = currentRight;
+            newWidth = Math.max(50, fixedRight - currentX);
+            newHeight = element.height; // Keep height unchanged
             break;
-          case 'n': // Top edge - adjust Y position
-            newHeight = Math.max(30, resizeStart.height - deltaY);
-            if (newHeight !== element.height) {
-              newY = element.positionY - (newHeight - element.height) / 2;
-            }
+          case 'n': // North: fix bottom edge
+            fixedBottom = currentBottom;
+            newWidth = element.width; // Keep width unchanged
+            newHeight = Math.max(30, fixedBottom - currentY);
             break;
-          case 's': // Bottom edge - no position change needed
-            newHeight = Math.max(30, resizeStart.height + deltaY);
+          case 's': // South: fix top edge
+            fixedTop = currentTop;
+            newWidth = element.width; // Keep width unchanged
+            newHeight = Math.max(30, currentY - fixedTop);
+            break;
+        }
+        
+        // Calculate new center position based on fixed edges and new dimensions
+        switch (resizeHandle) {
+          case 'se': // Fixed top-left corner
+            newX = fixedLeft + newWidth / 2;
+            newY = fixedTop + newHeight / 2;
+            break;
+          case 'sw': // Fixed top-right corner
+            newX = fixedRight - newWidth / 2;
+            newY = fixedTop + newHeight / 2;
+            break;
+          case 'ne': // Fixed bottom-left corner
+            newX = fixedLeft + newWidth / 2;
+            newY = fixedBottom - newHeight / 2;
+            break;
+          case 'nw': // Fixed bottom-right corner
+            newX = fixedRight - newWidth / 2;
+            newY = fixedBottom - newHeight / 2;
+            break;
+          case 'e': // Fixed left edge
+            newX = fixedLeft + newWidth / 2;
+            newY = element.positionY; // Keep Y unchanged
+            break;
+          case 'w': // Fixed right edge
+            newX = fixedRight - newWidth / 2;
+            newY = element.positionY; // Keep Y unchanged
+            break;
+          case 'n': // Fixed bottom edge
+            newX = element.positionX; // Keep X unchanged
+            newY = fixedBottom - newHeight / 2;
+            break;
+          case 's': // Fixed top edge
+            newX = element.positionX; // Keep X unchanged
+            newY = fixedTop + newHeight / 2;
             break;
         }
         
