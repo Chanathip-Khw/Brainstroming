@@ -456,6 +456,15 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     return elements.filter(el => el.styleData?.groupId === groupId);
   };
 
+  // Get total vote count for all sticky notes in a group
+  const getGroupVoteCount = (groupId: string) => {
+    const groupElements = getElementsInGroup(groupId);
+    const stickyNotes = groupElements.filter(el => el.type === 'STICKY_NOTE');
+    return stickyNotes.reduce((total, stickyNote) => {
+      return total + (stickyNote._count?.votes || 0);
+    }, 0);
+  };
+
   // Check if a point is inside a group boundary
   const isPointInGroup = (x: number, y: number, group: CanvasElement) => {
     const groupLeft = group.positionX - group.width / 2;
@@ -1158,8 +1167,13 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                     {element?.type === 'GROUP' && (
                       <div className="p-2 bg-blue-50 rounded text-sm">
                         <div className="font-medium text-blue-800 mb-1">Group Info</div>
-                        <div className="text-blue-600">
-                          Contains {getElementsInGroup(selectedElement).length} items
+                        <div className="text-blue-600 space-y-1">
+                          <div>Contains {getElementsInGroup(selectedElement).length} items</div>
+                          {getGroupVoteCount(selectedElement) > 0 && (
+                            <div className="font-semibold text-red-600">
+                              Total votes: {getGroupVoteCount(selectedElement)}
+                            </div>
+                          )}
                         </div>
                         <div className="text-xs text-blue-500 mt-1">
                           Drag sticky notes into this group to organize them
@@ -1323,9 +1337,19 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                     )}
                   </div>
                   
-                  {/* Group content count */}
-                  <div className="absolute -bottom-6 right-0 bg-gray-600 text-white px-2 py-1 rounded text-xs">
-                    {getElementsInGroup(element.id).length} items
+                  {/* Group stats */}
+                  <div className="absolute -bottom-6 right-0 flex gap-2">
+                    {/* Item count */}
+                    <div className="bg-gray-600 text-white px-2 py-1 rounded text-xs">
+                      {getElementsInGroup(element.id).length} items
+                    </div>
+                    
+                    {/* Vote count (only show if there are votes) */}
+                    {getGroupVoteCount(element.id) > 0 && (
+                      <div className="bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
+                        {getGroupVoteCount(element.id)} votes
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
