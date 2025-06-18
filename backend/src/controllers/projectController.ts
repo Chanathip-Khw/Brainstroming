@@ -620,7 +620,7 @@ export const projectController = {
         });
       }
 
-      // Delete the element (hard delete since no isActive field)
+      // Delete the element (this will cascade delete related votes)
       await prisma.canvasElement.delete({
         where: { id: elementId }
       });
@@ -644,7 +644,7 @@ export const projectController = {
     }
   },
 
-  // Get canvas elements for a project
+  // Get canvas elements with vote counts
   async getElements(request: AuthenticatedRequest, reply: FastifyReply) {
     try {
       if (!request.currentUser) {
@@ -676,18 +676,32 @@ export const projectController = {
       if (!project) {
         return reply.code(404).send({
           success: false,
-          error: "Board not found or you don't have access"
+          error: "Project not found or you don't have access"
         });
       }
 
-      // Get all canvas elements
+      // Get elements with vote counts
       const elements = await prisma.canvasElement.findMany({
-        where: {
-          projectId
+        where: { projectId },
+        include: {
+          _count: {
+            select: {
+              votes: true
+            }
+          },
+          votes: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  avatarUrl: true
+                }
+              }
+            }
+          }
         },
-        orderBy: {
-          createdAt: 'asc'
-        }
+        orderBy: { createdAt: 'asc' }
       });
 
       return reply.send({
@@ -699,6 +713,241 @@ export const projectController = {
       return reply.code(500).send({
         success: false,
         error: 'Failed to fetch elements'
+      });
+    }
+  },
+
+  // Add vote to element
+  async addVote(request: AuthenticatedRequest, reply: FastifyReply) {
+    try {
+      if (!request.currentUser) {
+        return reply.code(401).send({
+          success: false,
+          error: "Authentication required"
+        });
+      }
+
+      const userId = request.currentUser.userId;
+      const { projectId, elementId } = request.params as { projectId: string; elementId: string };
+      const { type = 'LIKE' } = request.body as { type?: string };
+
+      // Verify user has access and element exists
+      const element = await prisma.canvasElement.findFirst({
+        where: {
+          id: elementId,
+          projectId,
+          project: {
+            workspace: {
+              members: {
+                some: {
+                  userId,
+                  isActive: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!element) {
+        return reply.code(404).send({
+          success: false,
+          error: "Element not found or you don't have access"
+        });
+      }
+
+      // Check if user already voted on this element
+      const existingVote = await prisma.vote.findFirst({
+        where: {
+          elementId,
+          userId
+        }
+      });
+
+      if (existingVote) {
+        return reply.code(400).send({
+          success: false,
+          error: "You have already voted on this element"
+        });
+      }
+
+      // Create the vote
+      const vote = await prisma.vote.create({
+        data: {
+          elementId,
+          userId,
+          type: type as any
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              avatarUrl: true
+            }
+          }
+        }
+      });
+
+      // Update project's updatedAt timestamp
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { updatedAt: new Date() }
+      });
+
+      return reply.code(201).send({
+        success: true,
+        vote
+      });
+    } catch (error) {
+      console.error('Error adding vote:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to add vote'
+      });
+    }
+  },
+
+  // Remove vote from element
+  async removeVote(request: AuthenticatedRequest, reply: FastifyReply) {
+    try {
+      if (!request.currentUser) {
+        return reply.code(401).send({
+          success: false,
+          error: "Authentication required"
+        });
+      }
+
+      const userId = request.currentUser.userId;
+      const { projectId, elementId } = request.params as { projectId: string; elementId: string };
+
+      // Verify user has access and element exists
+      const element = await prisma.canvasElement.findFirst({
+        where: {
+          id: elementId,
+          projectId,
+          project: {
+            workspace: {
+              members: {
+                some: {
+                  userId,
+                  isActive: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!element) {
+        return reply.code(404).send({
+          success: false,
+          error: "Element not found or you don't have access"
+        });
+      }
+
+      // Find and delete the vote
+      const vote = await prisma.vote.findFirst({
+        where: {
+          elementId,
+          userId
+        }
+      });
+
+      if (!vote) {
+        return reply.code(404).send({
+          success: false,
+          error: "Vote not found"
+        });
+      }
+
+      await prisma.vote.delete({
+        where: { id: vote.id }
+      });
+
+      // Update project's updatedAt timestamp
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { updatedAt: new Date() }
+      });
+
+      return reply.send({
+        success: true,
+        message: "Vote removed successfully"
+      });
+    } catch (error) {
+      console.error('Error removing vote:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to remove vote'
+      });
+    }
+  },
+
+  // Get votes for an element
+  async getElementVotes(request: AuthenticatedRequest, reply: FastifyReply) {
+    try {
+      if (!request.currentUser) {
+        return reply.code(401).send({
+          success: false,
+          error: "Authentication required"
+        });
+      }
+
+      const userId = request.currentUser.userId;
+      const { projectId, elementId } = request.params as { projectId: string; elementId: string };
+
+      // Verify user has access and element exists
+      const element = await prisma.canvasElement.findFirst({
+        where: {
+          id: elementId,
+          projectId,
+          project: {
+            workspace: {
+              members: {
+                some: {
+                  userId,
+                  isActive: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!element) {
+        return reply.code(404).send({
+          success: false,
+          error: "Element not found or you don't have access"
+        });
+      }
+
+      // Get votes for the element
+      const votes = await prisma.vote.findMany({
+        where: { elementId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              avatarUrl: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+
+      return reply.send({
+        success: true,
+        votes,
+        totalVotes: votes.length,
+        userVoted: votes.some(vote => vote.userId === userId)
+      });
+    } catch (error) {
+      console.error('Error fetching element votes:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to fetch votes'
       });
     }
   }

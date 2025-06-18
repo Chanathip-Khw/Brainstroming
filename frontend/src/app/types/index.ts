@@ -21,6 +21,19 @@ export interface Board {
   lastModified: string;
 }
 
+export interface Vote {
+  id: string;
+  elementId: string;
+  userId: string;
+  type: 'LIKE' | 'DISLIKE' | 'STAR' | 'PRIORITY_LOW' | 'PRIORITY_MEDIUM' | 'PRIORITY_HIGH';
+  createdAt: string;
+  user: {
+    id: string;
+    name: string;
+    avatarUrl: string;
+  };
+}
+
 export interface StickyNote {
   id: string;
   x: number;
@@ -29,6 +42,11 @@ export interface StickyNote {
   color: string;
   votes: number;
   author: string;
+  voteData?: {
+    totalVotes: number;
+    userVoted: boolean;
+    votes: Vote[];
+  };
 }
 
 export interface CanvasElement {
@@ -42,6 +60,11 @@ export interface CanvasElement {
   color: string;
   votes?: number;
   author: string;
+  voteData?: {
+    totalVotes: number;
+    userVoted: boolean;
+    votes: Vote[];
+  };
 }
 
 export interface BoardSettings {

@@ -19,6 +19,19 @@ interface CanvasElement {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  _count?: {
+    votes: number;
+  };
+  votes?: {
+    id: string;
+    userId: string;
+    type: string;
+    user: {
+      id: string;
+      name: string;
+      avatarUrl: string;
+    };
+  }[];
 }
 
 interface CanvasBoardProps {
@@ -70,7 +83,8 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     { id: 'TEXT', icon: Type, label: 'Text' },
     { id: 'SHAPE', icon: Circle, label: 'Shape' },
     { id: 'line', icon: Minus, label: 'Line' },
-    { id: 'move', icon: Move, label: 'Pan' }
+    { id: 'move', icon: Move, label: 'Pan' },
+    { id: 'vote', icon: Vote, label: 'Vote' }
   ];
 
   // Fetch elements from backend
@@ -90,6 +104,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       const data = await response.json();
       
       if (data.success) {
+        console.log('Raw elements data from backend:', data.elements);
         // Convert decimal positions to numbers
         const processedElements = data.elements.map((element: any) => ({
           ...element,
@@ -99,7 +114,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
           height: typeof element.height === 'string' ? parseFloat(element.height) : Number(element.height)
         }));
         setElements(processedElements);
-        console.log('Loaded elements with positions:', processedElements);
+        console.log('Loaded elements with votes data:', processedElements);
       } else {
         console.error('Failed to fetch elements:', data.error);
       }
@@ -279,6 +294,161 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     }
   };
 
+  // Add vote to element
+  const addVote = async (elementId: string) => {
+    if (!session?.accessToken || !projectId) return;
+    
+    console.log('Attempting to add vote for element:', elementId);
+    
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${projectId}/elements/${elementId}/votes`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.accessToken}`
+          },
+          body: JSON.stringify({ type: 'LIKE' })
+        }
+      );
+      
+      const data = await response.json();
+      console.log('Add vote response:', data);
+      
+      if (data.success) {
+        // Update the element with new vote count
+        setElements(prev => prev.map(el => {
+          if (el.id === elementId) {
+            return {
+              ...el,
+              _count: { votes: (el._count?.votes || 0) + 1 },
+              votes: [...(el.votes || []), data.vote]
+            };
+          }
+          return el;
+        }));
+        console.log('Vote added successfully');
+        // Refresh elements to get updated vote data
+        fetchElements();
+      } else {
+        console.error('Failed to add vote:', data.error);
+        alert('Failed to add vote: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error adding vote:', error);
+      alert('Error adding vote: ' + error);
+    }
+  };
+
+  // Remove vote from element
+  const removeVote = async (elementId: string) => {
+    if (!session?.accessToken || !projectId) return;
+    
+    console.log('Attempting to remove vote for element:', elementId);
+    
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${projectId}/elements/${elementId}/votes`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`
+          }
+        }
+      );
+      
+      const data = await response.json();
+      console.log('Remove vote response:', data);
+      
+      if (data.success) {
+        // Update the element with decreased vote count
+        setElements(prev => prev.map(el => {
+          if (el.id === elementId) {
+            return {
+              ...el,
+              _count: { votes: Math.max((el._count?.votes || 0) - 1, 0) },
+              votes: el.votes?.filter(vote => vote.userId !== user.id) || []
+            };
+          }
+          return el;
+        }));
+        console.log('Vote removed successfully');
+        // Refresh elements to get updated vote data
+        fetchElements();
+      } else {
+        console.error('Failed to remove vote:', data.error);
+        alert('Failed to remove vote: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error removing vote:', error);
+      alert('Error removing vote: ' + error);
+    }
+  };
+
+  // Check if user has voted on an element
+  const hasUserVoted = (element: CanvasElement) => {
+    console.log('Checking if user voted:', {
+      elementId: element.id,
+      userId: user.id,
+      userIdType: typeof user.id,
+      votes: element.votes,
+      voteUserIds: element.votes?.map(vote => ({ userId: vote.userId, type: typeof vote.userId })),
+      hasVotes: element.votes?.some(vote => {
+        console.log('Comparing:', vote.userId, 'vs', user.id, 'equal:', vote.userId === user.id);
+        return vote.userId === user.id;
+      })
+    });
+    return element.votes?.some(vote => vote.userId === user.id) || false;
+  };
+
+  // Handle voting on element (only sticky notes)
+  const handleElementVote = async (elementId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const element = elements.find(el => el.id === elementId);
+    if (!element || element.type !== 'STICKY_NOTE') return;
+
+    // First, let's check the current backend state for this element
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${projectId}/elements/${elementId}/votes`,
+        {
+          headers: {
+            Authorization: `Bearer ${session?.accessToken}`
+          }
+        }
+      );
+      
+      const voteData = await response.json();
+      console.log('Current backend vote state:', voteData);
+      
+      if (voteData.success) {
+        // Check if user has voted based on backend data
+        const userHasVoted = voteData.userVoted;
+        console.log('Backend says user voted:', userHasVoted);
+        
+        if (userHasVoted) {
+          await removeVote(elementId);
+        } else {
+          await addVote(elementId);
+        }
+      } else {
+        console.error('Failed to get vote state:', voteData.error);
+      }
+    } catch (error) {
+      console.error('Error checking vote state:', error);
+      // Fallback to frontend state
+      const userHasVoted = hasUserVoted(element);
+      console.log('Fallback - frontend thinks user voted:', userHasVoted);
+      
+      if (userHasVoted) {
+        removeVote(elementId);
+      } else {
+        addVote(elementId);
+      }
+    }
+  };
+
   // Load elements on component mount
   useEffect(() => {
     fetchElements();
@@ -412,6 +582,12 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     
     if (tool === 'select') {
       setSelectedElement(elementId);
+    } else if (tool === 'vote') {
+      const element = elements.find(el => el.id === elementId);
+      // Only allow voting on sticky notes
+      if (element?.type === 'STICKY_NOTE') {
+        handleElementVote(elementId, e);
+      }
     }
   };
 
@@ -1036,6 +1212,20 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
               ) : (
                 // Non-text element rendering (sticky notes, shapes)
                 <>
+                  {/* Vote count indicator (only for sticky notes) */}
+                  {element.type === 'STICKY_NOTE' && (element._count?.votes || 0) > 0 && (
+                    <div className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold z-10">
+                      {element._count?.votes}
+                    </div>
+                  )}
+                  
+                  {/* Voting indicator when vote tool is selected (only for sticky notes) */}
+                  {tool === 'vote' && element.type === 'STICKY_NOTE' && (
+                    <div className={`absolute -top-1 -left-1 w-3 h-3 rounded-full z-10 ${
+                      hasUserVoted(element) ? 'bg-green-500' : 'bg-blue-500'
+                    } opacity-70`} />
+                  )}
+                  
                   {editingElement === element.id ? (
                     <textarea
                       value={editingText}

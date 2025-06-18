@@ -23,4 +23,9 @@ export default async function (fastify: FastifyInstance) {
   fastify.put('/api/projects/:projectId/elements/:elementId', { preHandler: authenticateToken }, projectController.updateElement)
   fastify.delete('/api/projects/:projectId/elements/:elementId', { preHandler: authenticateToken }, projectController.deleteElement)
   fastify.get('/api/projects/:projectId/elements', { preHandler: authenticateToken }, projectController.getElements)
+  
+  // Voting operations
+  fastify.post('/api/projects/:projectId/elements/:elementId/votes', { preHandler: authenticateToken }, projectController.addVote)
+  fastify.delete('/api/projects/:projectId/elements/:elementId/votes', { preHandler: authenticateToken }, projectController.removeVote)
+  fastify.get('/api/projects/:projectId/elements/:elementId/votes', { preHandler: authenticateToken }, projectController.getElementVotes)
 } 
