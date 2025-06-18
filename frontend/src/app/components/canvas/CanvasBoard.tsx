@@ -2,6 +2,9 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { Hand, Square, Type, Circle, Minus, Move, Vote, Trash2, Edit3, Group } from 'lucide-react';
 import { User } from '../../types';
+import { SessionTimer } from '../SessionTimer';
+import { SessionTemplates } from '../SessionTemplates';
+import { Clock, Users } from 'lucide-react';
 
 interface CanvasElement {
   id: string;
@@ -43,6 +46,8 @@ interface CanvasBoardProps {
 export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   const { data: session } = useSession();
   const canvasRef = useRef<HTMLDivElement>(null);
+  const sessionTimerRef = useRef<any>(null);
+  const sessionTemplatesRef = useRef<any>(null);
   const [tool, setTool] = useState<string>('select');
   const [elements, setElements] = useState<CanvasElement[]>([]);
   const [selectedColor, setSelectedColor] = useState('#fbbf24');
@@ -63,6 +68,12 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   const [isResizing, setIsResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [timerNotification, setTimerNotification] = useState<string | null>(null);
+  const [currentTemplate, setCurrentTemplate] = useState<any>(null);
+  const [currentActivityIndex, setCurrentActivityIndex] = useState(0);
+  const [templateSessionId, setTemplateSessionId] = useState<string | null>(null);
+  const [showTimerModal, setShowTimerModal] = useState(false);
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
 
   const colors = [
     '#fbbf24', '#3b82f6', '#10b981', '#ec4899', 
@@ -504,6 +515,37 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     await updateElement(elementId, { styleData: restStyleData });
   };
 
+  // Handle timer completion
+  const handleTimerComplete = (activityName: string) => {
+    setTimerNotification(activityName);
+    
+    // If running a template, advance to next activity
+    if (currentTemplate && currentActivityIndex < currentTemplate.activities.length - 1) {
+      setTimeout(() => {
+        setCurrentActivityIndex(prev => prev + 1);
+        setTimerNotification(null);
+      }, 3000);
+    } else {
+      // Template completed or single timer
+      setTimeout(() => {
+        setTimerNotification(null);
+        setCurrentTemplate(null);
+        setCurrentActivityIndex(0);
+        setTemplateSessionId(null);
+      }, 5000);
+    }
+  };
+
+  // Handle starting a session template
+  const handleStartTemplate = (template: any) => {
+    // Generate unique session ID to force restart even for same template
+    const sessionId = `${template.id}-${Date.now()}`;
+    setTemplateSessionId(sessionId);
+    setCurrentTemplate(template);
+    setCurrentActivityIndex(0);
+    // The SessionTimer will automatically start the first activity
+  };
+
   // Load elements on component mount
   useEffect(() => {
     fetchElements();
@@ -620,7 +662,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
           height: tool === 'TEXT' ? 30 : tool === 'GROUP' ? 200 : 150,
           content: tool === 'GROUP' ? 'Group Label' : tool === 'STICKY_NOTE' ? '' : tool === 'TEXT' ? '' : '',
           styleData: { 
-            color: tool === 'GROUP' ? '#f3f4f6' : selectedColor,
+            color: selectedColor,
             ...(tool === 'SHAPE' && { shapeType: selectedShape })
           }
         };
@@ -960,6 +1002,82 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     return color + '80'; // Add 50% opacity (80 in hex)
   };
 
+  // Helper function to get group color classes
+  const getGroupColor = (element: CanvasElement) => {
+    if (element.type !== 'GROUP') {
+      return {
+        border: 'border-gray-400',
+        bg: 'bg-gray-50 bg-opacity-30',
+        selectedBorder: 'border-indigo-500',
+        selectedBg: 'bg-indigo-50',
+        label: 'bg-gray-200 text-gray-700'
+      };
+    }
+
+    const color = element.styleData?.color || '#6b7280';
+    
+    const colorMap: { [key: string]: any } = {
+      '#fbbf24': { // yellow
+        border: 'border-yellow-400',
+        bg: 'bg-yellow-50 bg-opacity-40',
+        selectedBorder: 'border-yellow-600',
+        selectedBg: 'bg-yellow-100',
+        label: 'bg-yellow-200 text-yellow-800'
+      },
+      '#3b82f6': { // blue
+        border: 'border-blue-400',
+        bg: 'bg-blue-50 bg-opacity-40',
+        selectedBorder: 'border-blue-600',
+        selectedBg: 'bg-blue-100',
+        label: 'bg-blue-200 text-blue-800'
+      },
+      '#10b981': { // green
+        border: 'border-green-400',
+        bg: 'bg-green-50 bg-opacity-40',
+        selectedBorder: 'border-green-600',
+        selectedBg: 'bg-green-100',
+        label: 'bg-green-200 text-green-800'
+      },
+      '#ec4899': { // pink
+        border: 'border-pink-400',
+        bg: 'bg-pink-50 bg-opacity-40',
+        selectedBorder: 'border-pink-600',
+        selectedBg: 'bg-pink-100',
+        label: 'bg-pink-200 text-pink-800'
+      },
+      '#8b5cf6': { // purple
+        border: 'border-purple-400',
+        bg: 'bg-purple-50 bg-opacity-40',
+        selectedBorder: 'border-purple-600',
+        selectedBg: 'bg-purple-100',
+        label: 'bg-purple-200 text-purple-800'
+      },
+      '#f97316': { // orange
+        border: 'border-orange-400',
+        bg: 'bg-orange-50 bg-opacity-40',
+        selectedBorder: 'border-orange-600',
+        selectedBg: 'bg-orange-100',
+        label: 'bg-orange-200 text-orange-800'
+      },
+      '#ef4444': { // red
+        border: 'border-red-400',
+        bg: 'bg-red-50 bg-opacity-40',
+        selectedBorder: 'border-red-600',
+        selectedBg: 'bg-red-100',
+        label: 'bg-red-200 text-red-800'
+      },
+      '#6b7280': { // gray (default)
+        border: 'border-gray-400',
+        bg: 'bg-gray-50 bg-opacity-30',
+        selectedBorder: 'border-indigo-500',
+        selectedBg: 'bg-indigo-50',
+        label: 'bg-gray-200 text-gray-700'
+      }
+    };
+
+    return colorMap[color] || colorMap['#6b7280'];
+  };
+
   // Render resize handles for selected element
   const renderResizeHandles = (element: CanvasElement) => {
     if (selectedElement !== element.id) return null;
@@ -1102,6 +1220,32 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
   return (
     <div className="flex flex-1">
+      {/* Timer and Templates modals */}
+      <SessionTimer 
+        onTimerComplete={handleTimerComplete}
+        currentTemplate={currentTemplate}
+        currentActivityIndex={currentActivityIndex}
+        templateSessionId={templateSessionId}
+        isOpen={showTimerModal}
+        onOpenChange={setShowTimerModal}
+      />
+      <SessionTemplates 
+        onStartTemplate={handleStartTemplate}
+        isOpen={showTemplatesModal}
+        onOpenChange={setShowTemplatesModal}
+      />
+
+      {/* Timer Completion Notification */}
+      {timerNotification && (
+        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-green-500 text-white px-8 py-4 rounded-lg shadow-xl animate-pulse">
+          <div className="text-center">
+            <div className="text-xl font-bold mb-1">Time's Up!</div>
+            <div className="text-sm">{timerNotification} completed</div>
+            <div className="text-xs mt-1 opacity-75">Great work! Ready for the next phase?</div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white border-r border-gray-200 p-4 w-64 flex flex-col gap-4">
         <div>
           <h3 className="text-sm font-medium text-gray-700 mb-3">Tools</h3>
@@ -1136,6 +1280,35 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                 style={{ backgroundColor: color }}
               />
             ))}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-sm font-medium text-gray-700 mb-3">Session</h3>
+          <div className="space-y-2">
+            <button
+              onClick={() => setShowTemplatesModal(true)}
+              className="w-full p-3 rounded-lg bg-purple-500 hover:bg-purple-600 text-white transition-colors flex items-center gap-2"
+              title="Session Templates"
+            >
+              <Users className="w-5 h-5" />
+              <span className="text-sm font-medium">Templates</span>
+            </button>
+            
+            <button
+              onClick={() => setShowTimerModal(true)}
+              className={`w-full p-3 rounded-lg transition-all duration-200 flex items-center gap-2 ${
+                currentTemplate 
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+              }`}
+              title="Session Timer"
+            >
+              <Clock className="w-5 h-5" />
+              <span className="text-sm font-medium">
+                {currentTemplate ? 'Running Timer' : 'Timer'}
+              </span>
+            </button>
           </div>
         </div>
 
@@ -1183,6 +1356,25 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                         <Edit3 className="w-4 h-4" />
                         {element?.type === 'GROUP' ? 'Edit Label' : 'Edit Text'}
                       </button>
+                    )}
+
+                    {/* Color picker for selected group */}
+                    {element?.type === 'GROUP' && (
+                      <div>
+                        <h4 className="text-xs font-medium text-gray-600 mb-2">Group Color</h4>
+                        <div className="grid grid-cols-4 gap-2">
+                          {colors.map((color) => (
+                            <button
+                              key={color}
+                              onClick={() => updateElement(selectedElement, { styleData: { ...element.styleData, color } })}
+                              className={`w-6 h-6 rounded border-2 ${
+                                element.styleData?.color === color ? 'border-gray-800' : 'border-gray-300'
+                              }`}
+                              style={{ backgroundColor: color }}
+                            />
+                          ))}
+                        </div>
+                      </div>
                     )}
                     
                     {element?.type === 'GROUP' && (
@@ -1268,7 +1460,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                   : element.type === 'SHAPE'
                   ? `${selectedElement === element.id ? 'ring-2 ring-indigo-500 rounded' : ''}`
                   : element.type === 'GROUP'
-                  ? `border-2 border-dashed border-gray-400 bg-gray-50 bg-opacity-30 ${selectedElement === element.id ? 'border-indigo-500 bg-indigo-50' : ''}`
+                  ? `border-2 border-dashed ${getGroupColor(element).border} ${getGroupColor(element).bg} ${selectedElement === element.id ? `${getGroupColor(element).selectedBorder} ${getGroupColor(element).selectedBg}` : ''}`
                   : `${getElementColor(element)} p-3 rounded-lg shadow-sm flex flex-col justify-between ${selectedElement === element.id ? 'ring-2 ring-indigo-500' : ''}`
               }`}
               style={{
@@ -1336,7 +1528,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                 // Group element rendering
                 <div className="w-full h-full relative">
                   {/* Group label */}
-                  <div className="absolute -top-6 left-0 bg-gray-200 px-2 py-1 rounded text-xs font-medium text-gray-700">
+                  <div className={`absolute -top-6 left-0 px-2 py-1 rounded text-xs font-medium ${getGroupColor(element).label}`}>
                     {editingElement === element.id ? (
                       <input
                         type="text"
