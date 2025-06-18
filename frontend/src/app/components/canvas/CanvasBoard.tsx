@@ -1,11 +1,11 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { Hand, Square, Type, Circle, Minus, Move, Vote, Trash2, Edit3 } from 'lucide-react';
+import { Hand, Square, Type, Circle, Minus, Move, Vote, Trash2, Edit3, Group } from 'lucide-react';
 import { User } from '../../types';
 
 interface CanvasElement {
   id: string;
-  type: 'STICKY_NOTE' | 'TEXT' | 'SHAPE';
+  type: 'STICKY_NOTE' | 'TEXT' | 'SHAPE' | 'GROUP';
   positionX: number;
   positionY: number;
   width: number;
@@ -14,6 +14,7 @@ interface CanvasElement {
   styleData: {
     color: string;
     shapeType?: string;
+    groupId?: string;
     [key: string]: any;
   };
   createdBy: string;
@@ -82,6 +83,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     { id: 'STICKY_NOTE', icon: Square, label: 'Sticky Note' },
     { id: 'TEXT', icon: Type, label: 'Text' },
     { id: 'SHAPE', icon: Circle, label: 'Shape' },
+    { id: 'GROUP', icon: Group, label: 'Group' },
     { id: 'line', icon: Minus, label: 'Line' },
     { id: 'move', icon: Move, label: 'Pan' },
     { id: 'vote', icon: Vote, label: 'Vote' }
@@ -449,6 +451,50 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     }
   };
 
+  // Get elements that belong to a specific group
+  const getElementsInGroup = (groupId: string) => {
+    return elements.filter(el => el.styleData?.groupId === groupId);
+  };
+
+  // Check if a point is inside a group boundary
+  const isPointInGroup = (x: number, y: number, group: CanvasElement) => {
+    const groupLeft = group.positionX - group.width / 2;
+    const groupRight = group.positionX + group.width / 2;
+    const groupTop = group.positionY - group.height / 2;
+    const groupBottom = group.positionY + group.height / 2;
+    
+    return x >= groupLeft && x <= groupRight && y >= groupTop && y <= groupBottom;
+  };
+
+  // Find which group contains a point (if any)
+  const findGroupAtPoint = (x: number, y: number) => {
+    return elements.find(el => 
+      el.type === 'GROUP' && isPointInGroup(x, y, el)
+    );
+  };
+
+  // Add element to group
+  const addElementToGroup = async (elementId: string, groupId: string) => {
+    const element = elements.find(el => el.id === elementId);
+    if (!element) return;
+
+    const updatedStyleData = {
+      ...element.styleData,
+      groupId: groupId
+    };
+
+    await updateElement(elementId, { styleData: updatedStyleData });
+  };
+
+  // Remove element from group
+  const removeElementFromGroup = async (elementId: string) => {
+    const element = elements.find(el => el.id === elementId);
+    if (!element) return;
+
+    const { groupId, ...restStyleData } = element.styleData;
+    await updateElement(elementId, { styleData: restStyleData });
+  };
+
   // Load elements on component mount
   useEffect(() => {
     fetchElements();
@@ -551,21 +597,21 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       return;
     }
 
-    if (['STICKY_NOTE', 'TEXT', 'SHAPE'].includes(tool)) {
+    if (['STICKY_NOTE', 'TEXT', 'SHAPE', 'GROUP'].includes(tool)) {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect) {
         const x = (e.clientX - rect.left - panX) / scale;
         const y = (e.clientY - rect.top - panY) / scale;
         
         const newElement: Partial<CanvasElement> = {
-          type: tool as 'STICKY_NOTE' | 'TEXT' | 'SHAPE',
+          type: tool as 'STICKY_NOTE' | 'TEXT' | 'SHAPE' | 'GROUP',
           positionX: x,
           positionY: y,
-          width: tool === 'TEXT' ? 200 : 150,
-          height: tool === 'TEXT' ? 30 : 150,
-          content: tool === 'STICKY_NOTE' ? '' : tool === 'TEXT' ? '' : '',
+          width: tool === 'TEXT' ? 200 : tool === 'GROUP' ? 300 : 150,
+          height: tool === 'TEXT' ? 30 : tool === 'GROUP' ? 200 : 150,
+          content: tool === 'GROUP' ? 'Group Label' : tool === 'STICKY_NOTE' ? '' : tool === 'TEXT' ? '' : '',
           styleData: { 
-            color: selectedColor,
+            color: tool === 'GROUP' ? '#f3f4f6' : selectedColor,
             ...(tool === 'SHAPE' && { shapeType: selectedShape })
           }
         };
@@ -810,7 +856,27 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       }
     } else if (isDragging && selectedElement) {
       const element = elements.find(el => el.id === selectedElement);
-      if (element) {
+      if (element && element.type === 'STICKY_NOTE') {
+        // Check if sticky note was dropped into a group
+        const targetGroup = findGroupAtPoint(element.positionX, element.positionY);
+        
+        if (targetGroup && targetGroup.id !== element.styleData?.groupId) {
+          // Add to new group
+          console.log('Adding sticky note to group:', targetGroup.id);
+          addElementToGroup(selectedElement, targetGroup.id);
+        } else if (!targetGroup && element.styleData?.groupId) {
+          // Remove from current group if dropped outside any group
+          console.log('Removing sticky note from group');
+          removeElementFromGroup(selectedElement);
+        }
+        
+        // Update backend with final position
+        updateElement(selectedElement, {
+          positionX: element.positionX,
+          positionY: element.positionY
+        });
+      } else if (element) {
+        // Update backend with final position for non-sticky elements
         updateElement(selectedElement, {
           positionX: element.positionX,
           positionY: element.positionY
@@ -1070,7 +1136,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
             <div className="space-y-2">
               {(() => {
                 const element = elements.find(el => el.id === selectedElement);
-                const hasEditableText = element && (element.type === 'TEXT' || element.type === 'STICKY_NOTE');
+                const hasEditableText = element && (element.type === 'TEXT' || element.type === 'STICKY_NOTE' || element.type === 'GROUP');
                 
                 return (
                   <>
@@ -1085,9 +1151,22 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                         className="w-full p-2 text-left text-sm bg-gray-100 hover:bg-gray-200 rounded flex items-center gap-2"
                       >
                         <Edit3 className="w-4 h-4" />
-                        Edit Text
+                        {element?.type === 'GROUP' ? 'Edit Label' : 'Edit Text'}
                       </button>
                     )}
+                    
+                    {element?.type === 'GROUP' && (
+                      <div className="p-2 bg-blue-50 rounded text-sm">
+                        <div className="font-medium text-blue-800 mb-1">Group Info</div>
+                        <div className="text-blue-600">
+                          Contains {getElementsInGroup(selectedElement).length} items
+                        </div>
+                        <div className="text-xs text-blue-500 mt-1">
+                          Drag sticky notes into this group to organize them
+                        </div>
+                      </div>
+                    )}
+                    
                     <button
                       onClick={() => deleteElement(selectedElement)}
                       className="w-full p-2 text-left text-sm bg-red-100 text-red-700 hover:bg-red-200 rounded flex items-center gap-2"
@@ -1138,7 +1217,14 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
             }}
           />
 
-          {elements.map((element) => (
+          {elements
+            .sort((a, b) => {
+              // Groups should render first (behind other elements)
+              if (a.type === 'GROUP' && b.type !== 'GROUP') return -1;
+              if (b.type === 'GROUP' && a.type !== 'GROUP') return 1;
+              return 0;
+            })
+            .map((element) => (
             <div
               key={element.id}
               className={`absolute cursor-pointer select-none ${
@@ -1146,6 +1232,8 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                   ? `text-gray-800 ${selectedElement === element.id ? 'ring-2 ring-indigo-500 bg-white bg-opacity-20 rounded' : ''}` 
                   : element.type === 'SHAPE'
                   ? `${selectedElement === element.id ? 'ring-2 ring-indigo-500 rounded' : ''}`
+                  : element.type === 'GROUP'
+                  ? `border-2 border-dashed border-gray-400 bg-gray-50 bg-opacity-30 ${selectedElement === element.id ? 'border-indigo-500 bg-indigo-50' : ''}`
                   : `${getElementColor(element)} p-3 rounded-lg shadow-sm flex flex-col justify-between ${selectedElement === element.id ? 'ring-2 ring-indigo-500' : ''}`
               }`}
               style={{
@@ -1209,6 +1297,37 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
               ) : element.type === 'SHAPE' ? (
                 // Shape element rendering
                 renderShape(element)
+              ) : element.type === 'GROUP' ? (
+                // Group element rendering
+                <div className="w-full h-full relative">
+                  {/* Group label */}
+                  <div className="absolute -top-6 left-0 bg-gray-200 px-2 py-1 rounded text-xs font-medium text-gray-700">
+                    {editingElement === element.id ? (
+                      <input
+                        type="text"
+                        value={editingText}
+                        onChange={(e) => setEditingText(e.target.value)}
+                        onBlur={handleTextSubmit}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleTextSubmit();
+                          }
+                        }}
+                        className="border-none outline-none bg-transparent text-inherit font-inherit"
+                        style={{ fontSize: 'inherit', width: '80px' }}
+                        autoFocus
+                      />
+                    ) : (
+                      element.content || 'Group Label'
+                    )}
+                  </div>
+                  
+                  {/* Group content count */}
+                  <div className="absolute -bottom-6 right-0 bg-gray-600 text-white px-2 py-1 rounded text-xs">
+                    {getElementsInGroup(element.id).length} items
+                  </div>
+                </div>
               ) : (
                 // Non-text element rendering (sticky notes, shapes)
                 <>
@@ -1304,6 +1423,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
               <div><strong>+/- Keys:</strong> Zoom in/out</div>
               <div><strong>Arrow Keys:</strong> Pan canvas</div>
               <div><strong>Ctrl + 0:</strong> Reset zoom & center</div>
+              <div><strong>Groups:</strong> Drag sticky notes into groups</div>
             </div>
           </div>
         )}
