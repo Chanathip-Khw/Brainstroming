@@ -107,12 +107,24 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     onVoteAdded: (elementId, vote) => {
       setElements(prev => prev.map(el => {
         if (el.id === elementId) {
+          // Check if vote already exists to prevent duplicates
+          const existingVotes = el.votes || [];
+          const voteExists = existingVotes.some(existingVote => 
+            existingVote.userId === vote.userId && existingVote.id === vote.id
+          );
+          
+          if (voteExists) {
+            console.log('Vote already exists, skipping duplicate:', vote);
+            return el; // No change if vote already exists
+          }
+          
+          const updatedVotes = [...existingVotes, vote];
           return {
             ...el,
-            votes: [...(el.votes || []), vote],
+            votes: updatedVotes,
             _count: {
               ...el._count,
-              votes: (el._count?.votes || 0) + 1
+              votes: updatedVotes.length
             }
           };
         }
@@ -357,24 +369,36 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       console.log('Add vote response:', data);
       
       if (data.success) {
-        // Update the element with new vote count
+        // Update local UI immediately for the voting user (optimistic update)
         setElements(prev => prev.map(el => {
           if (el.id === elementId) {
+            // Check if vote already exists to prevent duplicates
+            const existingVotes = el.votes || [];
+            const voteExists = existingVotes.some(existingVote => 
+              existingVote.userId === data.vote.userId
+            );
+            
+            if (voteExists) {
+              console.log('Vote already exists locally, skipping optimistic update');
+              return el;
+            }
+            
+            const updatedVotes = [...existingVotes, data.vote];
             return {
               ...el,
-              _count: { votes: (el._count?.votes || 0) + 1 },
-              votes: [...(el.votes || []), data.vote]
+              votes: updatedVotes,
+              _count: {
+                ...el._count,
+                votes: updatedVotes.length
+              }
             };
           }
           return el;
         }));
         console.log('Vote added successfully');
         
-        // Emit real-time event
+        // Emit real-time event (this will update other users' UI)
         collaboration.emitVoteAdded(elementId, data.vote);
-        
-        // Refresh elements to get updated vote data
-        fetchElements();
       } else {
         console.error('Failed to add vote:', data.error);
         alert('Failed to add vote: ' + data.error);
@@ -398,24 +422,25 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       console.log('Remove vote response:', data);
       
       if (data.success) {
-        // Update the element with decreased vote count
+        // Update local UI immediately for the voting user (optimistic update)
         setElements(prev => prev.map(el => {
           if (el.id === elementId) {
+            const updatedVotes = (el.votes || []).filter(vote => vote.userId !== user.id);
             return {
               ...el,
-              _count: { votes: Math.max((el._count?.votes || 0) - 1, 0) },
-              votes: el.votes?.filter(vote => vote.userId !== user.id) || []
+              votes: updatedVotes,
+              _count: {
+                ...el._count,
+                votes: updatedVotes.length
+              }
             };
           }
           return el;
         }));
         console.log('Vote removed successfully');
         
-        // Emit real-time event
+        // Emit real-time event (this will update other users' UI)
         collaboration.emitVoteRemoved(elementId);
-        
-        // Refresh elements to get updated vote data
-        fetchElements();
       } else {
         console.error('Failed to remove vote:', data.error);
         alert('Failed to remove vote: ' + data.error);
