@@ -7,6 +7,7 @@ import { SessionTemplates } from '../SessionTemplates';
 import { Clock, Users } from 'lucide-react';
 import { useCollaboration } from '../../hooks/useCollaboration';
 import LiveCursors from '../LiveCursors';
+import { fetchApi } from '../../lib/api';
 
 interface CanvasElement {
   id: string;
@@ -163,19 +164,10 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
   // Fetch elements from backend
   const fetchElements = useCallback(async () => {
-    if (!session?.accessToken || !projectId) return;
+    if (!projectId) return;
     
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${projectId}/elements`,
-        {
-          headers: {
-            Authorization: `Bearer ${session.accessToken}`
-          }
-        }
-      );
-      
-      const data = await response.json();
+      const data = await fetchApi(`/api/projects/${projectId}/elements`);
       
       if (data.success) {
         console.log('Raw elements data from backend:', data.elements);
@@ -197,11 +189,11 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     } finally {
       setLoading(false);
     }
-  }, [session?.accessToken, projectId]);
+  }, [projectId]);
 
   // Create element with optimistic updates
   const createElement = async (elementData: Partial<CanvasElement>) => {
-    if (!session?.accessToken || !projectId) return;
+    if (!projectId) return;
     
     // Generate temporary ID for optimistic update
     const tempId = `temp-${Date.now()}-${Math.random()}`;
@@ -226,28 +218,19 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     
     try {
       // Send to backend in background
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${projectId}/elements`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.accessToken}`
-          },
-          body: JSON.stringify({
-            type: elementData.type,
-            x: elementData.positionX,
-            y: elementData.positionY,
-            width: elementData.width,
-            height: elementData.height,
-            content: elementData.content,
-            color: elementData.styleData?.color,
-            style: elementData.styleData
-          })
-        }
-      );
-      
-      const data = await response.json();
+      const data = await fetchApi(`/api/projects/${projectId}/elements`, {
+        method: 'POST',
+        body: JSON.stringify({
+          type: elementData.type,
+          x: elementData.positionX,
+          y: elementData.positionY,
+          width: elementData.width,
+          height: elementData.height,
+          content: elementData.content,
+          color: elementData.styleData?.color,
+          style: elementData.styleData
+        })
+      });
       
       if (data.success) {
         // Replace optimistic element with real element from backend
@@ -279,7 +262,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
   // Update element with optimistic updates
   const updateElement = async (elementId: string, updateData: Partial<CanvasElement>) => {
-    if (!session?.accessToken || !projectId) return;
+    if (!projectId) return;
     
     // Store current state for potential rollback
     const currentElement = elements.find(el => el.id === elementId);
@@ -291,19 +274,10 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     ));
     
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${projectId}/elements/${elementId}`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.accessToken}`
-          },
-          body: JSON.stringify(updateData)
-        }
-      );
-      
-      const data = await response.json();
+      const data = await fetchApi(`/api/projects/${projectId}/elements/${elementId}`, {
+        method: 'PUT',
+        body: JSON.stringify(updateData)
+      });
       
       if (data.success) {
         // Sync with backend response (in case backend modified the data)
@@ -338,7 +312,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
   // Delete element with optimistic updates
   const deleteElement = async (elementId: string) => {
-    if (!session?.accessToken || !projectId) return;
+    if (!projectId) return;
     
     // Store current element for potential restoration
     const elementToDelete = elements.find(el => el.id === elementId);
@@ -349,17 +323,9 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     setSelectedElement(null);
     
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${projectId}/elements/${elementId}`,
-        {
-          method: 'DELETE',
-          headers: {
-            Authorization: `Bearer ${session.accessToken}`
-          }
-        }
-      );
-      
-      const data = await response.json();
+      const data = await fetchApi(`/api/projects/${projectId}/elements/${elementId}`, {
+        method: 'DELETE'
+      });
       
       if (!data.success) {
         console.error('Failed to delete element:', data.error);
@@ -379,24 +345,15 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
   // Add vote to element
   const addVote = async (elementId: string) => {
-    if (!session?.accessToken || !projectId) return;
+    if (!projectId) return;
     
     console.log('Attempting to add vote for element:', elementId);
     
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${projectId}/elements/${elementId}/votes`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.accessToken}`
-          },
-          body: JSON.stringify({ type: 'LIKE' })
-        }
-      );
-      
-      const data = await response.json();
+      const data = await fetchApi(`/api/projects/${projectId}/elements/${elementId}/votes`, {
+        method: 'POST',
+        body: JSON.stringify({ type: 'LIKE' })
+      });
       console.log('Add vote response:', data);
       
       if (data.success) {
@@ -430,22 +387,14 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
   // Remove vote from element
   const removeVote = async (elementId: string) => {
-    if (!session?.accessToken || !projectId) return;
+    if (!projectId) return;
     
     console.log('Attempting to remove vote for element:', elementId);
     
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${projectId}/elements/${elementId}/votes`,
-        {
-          method: 'DELETE',
-          headers: {
-            Authorization: `Bearer ${session.accessToken}`
-          }
-        }
-      );
-      
-      const data = await response.json();
+      const data = await fetchApi(`/api/projects/${projectId}/elements/${elementId}/votes`, {
+        method: 'DELETE'
+      });
       console.log('Remove vote response:', data);
       
       if (data.success) {
@@ -501,16 +450,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
     // First, let's check the current backend state for this element
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${projectId}/elements/${elementId}/votes`,
-        {
-          headers: {
-            Authorization: `Bearer ${session?.accessToken}`
-          }
-        }
-      );
-      
-      const voteData = await response.json();
+      const voteData = await fetchApi(`/api/projects/${projectId}/elements/${elementId}/votes`);
       console.log('Current backend vote state:', voteData);
       
       if (voteData.success) {

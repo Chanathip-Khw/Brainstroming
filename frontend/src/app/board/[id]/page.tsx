@@ -9,6 +9,7 @@ import { CanvasBoard } from '../../components/canvas/CanvasBoard';
 import { BoardSettingsModal } from '../../components/boards/BoardSettingsModal';
 import { BoardSettings, User } from '../../types';
 import { useCollaboration } from '../../hooks/useCollaboration';
+import { fetchApi } from '../../lib/api';
 
 export default function BoardPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -51,18 +52,8 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
 
   // Fetch board data
   useEffect(() => {
-    if (status === 'authenticated' && session?.accessToken) {
-      fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/projects/${resolvedParams.id}`, {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`
-        }
-      })
-      .then(res => {
-        if (!res.ok) {
-          throw new Error(`API error: ${res.status} ${res.statusText}`);
-        }
-        return res.json();
-      })
+    if (status === 'authenticated') {
+      fetchApi(`/api/projects/${resolvedParams.id}`)
       .then(data => {
         if (data.success && data.project) {
           setBoardName(data.project.name);
