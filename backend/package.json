@@ -20,7 +20,8 @@
         "cuid": "^3.0.0",
         "dotenv": "^16.5.0",
         "fastify": "^5.3.3",
-        "jsonwebtoken": "^9.0.2"
+        "jsonwebtoken": "^9.0.2",
+        "socket.io": "^4.8.1"
     },
     "devDependencies": {
         "@mermaid-js/mermaid-cli": "^11.4.2",

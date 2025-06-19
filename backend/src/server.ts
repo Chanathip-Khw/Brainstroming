@@ -1,6 +1,7 @@
 ﻿import { createServer, registerPlugins } from './config/server'
 import { registerRoutes } from './routes'
 import { prisma } from './config/database'
+import { socketService } from './services/socketService'
 import 'dotenv/config'
 
 const fastify = createServer()
@@ -33,9 +34,13 @@ async function start() {
       host: process.env.HOST || '0.0.0.0' 
     })
     
+    // Initialize Socket.IO after server starts
+    socketService.initialize(fastify.server)
+    
     const address = fastify.server.address();
     const port = typeof address === 'string' ? address : address?.port;
     fastify.log.info(`Server listening on port ${port}`);
+    fastify.log.info(`Socket.IO server initialized`);
   } catch (error) {
     fastify.log.error(error)
     process.exit(1)

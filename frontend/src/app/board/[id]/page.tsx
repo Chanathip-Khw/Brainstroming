@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { CanvasBoard } from '../../components/canvas/CanvasBoard';
 import { BoardSettingsModal } from '../../components/boards/BoardSettingsModal';
 import { BoardSettings, User } from '../../types';
+import { useCollaboration } from '../../hooks/useCollaboration';
 
 export default function BoardPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -17,6 +18,29 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const [boardName, setBoardName] = useState('Loading...');
   const [loading, setLoading] = useState(true);
   const [workspaceMembers, setWorkspaceMembers] = useState<any[]>([]);
+
+  // Real-time collaboration for member presence
+  const collaboration = useCollaboration({
+    projectId: resolvedParams.id,
+    onElementCreated: () => {},
+    onElementUpdated: () => {},
+    onElementDeleted: () => {},
+    onVoteAdded: () => {},
+    onVoteRemoved: () => {}
+  });
+
+  // Update member status when collaboration users change
+  useEffect(() => {
+    if (collaboration.projectUsers.length >= 0) {
+      setWorkspaceMembers(prev => 
+        prev.map(member => ({
+          ...member,
+          // Update member status based on real-time collaboration data
+          isInCollaboration: collaboration.projectUsers.some(user => user.userId === member.id)
+        }))
+      );
+    }
+  }, [collaboration.projectUsers]);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -74,11 +98,14 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
 
   // Helper function to determine if a member is considered active
   const isMemberActive = (member: any) => {
+    // First check if user is currently in the real-time collaboration (most accurate)
+    if (member.isInCollaboration) return true;
+    
+    // Fallback to session-based logic
     if (!member.isActive) return false;
     
-    // Check if user has any active sessions (most reliable indicator)
+    // Check if user has any active sessions
     if (member.activeSessions && member.activeSessions.length > 0) {
-      // Check if any session was updated recently (within last 2 hours)
       const twoHoursAgo = Date.now() - (2 * 60 * 60 * 1000);
       const hasRecentActivity = member.activeSessions.some((session: any) => {
         const sessionUpdateTime = new Date(session.updatedAt).getTime();
@@ -88,7 +115,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
       if (hasRecentActivity) return true;
     }
     
-    // Fallback: check last login time (within 24 hours for long sessions)
+    // Final fallback: check last login time
     const lastLoginTime = new Date(member.lastLogin).getTime();
     const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
     

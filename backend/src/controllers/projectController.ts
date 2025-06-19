@@ -2,6 +2,7 @@ import { FastifyRequest, FastifyReply } from 'fastify'
 import { PrismaClient } from '@prisma/client'
 import { z } from 'zod'
 import { AuthenticatedRequest } from '../types'
+import { socketService } from '../services/socketService'
 
 const prisma = new PrismaClient()
 
@@ -502,6 +503,14 @@ export const projectController = {
         data: { updatedAt: new Date() }
       });
 
+      // Emit real-time event
+      socketService.emitToProject(projectId, 'collaboration_event', {
+        type: 'element_created',
+        data: element,
+        userId,
+        timestamp: Date.now()
+      });
+
       return reply.code(201).send({
         success: true,
         element
@@ -569,6 +578,14 @@ export const projectController = {
         data: { updatedAt: new Date() }
       });
 
+      // Emit real-time event
+      socketService.emitToProject(projectId, 'collaboration_event', {
+        type: 'element_updated',
+        data: updatedElement,
+        userId,
+        timestamp: Date.now()
+      });
+
       return reply.send({
         success: true,
         element: updatedElement
@@ -629,6 +646,14 @@ export const projectController = {
       await prisma.project.update({
         where: { id: projectId },
         data: { updatedAt: new Date() }
+      });
+
+      // Emit real-time event
+      socketService.emitToProject(projectId, 'collaboration_event', {
+        type: 'element_deleted',
+        data: { id: elementId },
+        userId,
+        timestamp: Date.now()
       });
 
       return reply.send({
@@ -795,6 +820,14 @@ export const projectController = {
         data: { updatedAt: new Date() }
       });
 
+      // Emit real-time event
+      socketService.emitToProject(projectId, 'collaboration_event', {
+        type: 'vote_added',
+        data: { elementId, vote },
+        userId,
+        timestamp: Date.now()
+      });
+
       return reply.code(201).send({
         success: true,
         vote
@@ -869,6 +902,14 @@ export const projectController = {
       await prisma.project.update({
         where: { id: projectId },
         data: { updatedAt: new Date() }
+      });
+
+      // Emit real-time event
+      socketService.emitToProject(projectId, 'collaboration_event', {
+        type: 'vote_removed',
+        data: { elementId, userId },
+        userId,
+        timestamp: Date.now()
       });
 
       return reply.send({

@@ -5,6 +5,8 @@ import { User } from '../../types';
 import { SessionTimer } from '../SessionTimer';
 import { SessionTemplates } from '../SessionTemplates';
 import { Clock, Users } from 'lucide-react';
+import { useCollaboration } from '../../hooks/useCollaboration';
+import LiveCursors from '../LiveCursors';
 
 interface CanvasElement {
   id: string;
@@ -74,6 +76,65 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   const [templateSessionId, setTemplateSessionId] = useState<string | null>(null);
   const [showTimerModal, setShowTimerModal] = useState(false);
   const [showTemplatesModal, setShowTemplatesModal] = useState(false);
+
+  // Real-time collaboration
+  const collaboration = useCollaboration({
+    projectId,
+    onElementCreated: (element) => {
+      const processedElement = {
+        ...element,
+        positionX: typeof element.positionX === 'string' ? parseFloat(element.positionX) : Number(element.positionX),
+        positionY: typeof element.positionY === 'string' ? parseFloat(element.positionY) : Number(element.positionY),
+        width: typeof element.width === 'string' ? parseFloat(element.width) : Number(element.width),
+        height: typeof element.height === 'string' ? parseFloat(element.height) : Number(element.height)
+      };
+      setElements(prev => [...prev, processedElement]);
+    },
+    onElementUpdated: (element) => {
+      const processedElement = {
+        ...element,
+        positionX: typeof element.positionX === 'string' ? parseFloat(element.positionX) : Number(element.positionX),
+        positionY: typeof element.positionY === 'string' ? parseFloat(element.positionY) : Number(element.positionY),
+        width: typeof element.width === 'string' ? parseFloat(element.width) : Number(element.width),
+        height: typeof element.height === 'string' ? parseFloat(element.height) : Number(element.height)
+      };
+      setElements(prev => prev.map(el => el.id === element.id ? processedElement : el));
+    },
+    onElementDeleted: (elementId) => {
+      setElements(prev => prev.filter(el => el.id !== elementId));
+    },
+    onVoteAdded: (elementId, vote) => {
+      setElements(prev => prev.map(el => {
+        if (el.id === elementId) {
+          return {
+            ...el,
+            votes: [...(el.votes || []), vote],
+            _count: {
+              ...el._count,
+              votes: (el._count?.votes || 0) + 1
+            }
+          };
+        }
+        return el;
+      }));
+    },
+    onVoteRemoved: (elementId, userId) => {
+      setElements(prev => prev.map(el => {
+        if (el.id === elementId) {
+          const updatedVotes = (el.votes || []).filter(vote => vote.userId !== userId);
+          return {
+            ...el,
+            votes: updatedVotes,
+            _count: {
+              ...el._count,
+              votes: updatedVotes.length
+            }
+          };
+        }
+        return el;
+      }));
+    }
+  });
 
   const colors = [
     '#fbbf24', '#3b82f6', '#10b981', '#ec4899', 
@@ -201,6 +262,9 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
         setElements(prev => prev.map(el => 
           el.id === tempId ? processedElement : el
         ));
+        
+        // Emit real-time event
+        collaboration.emitElementCreated(processedElement);
       } else {
         console.error('Failed to create element:', data.error);
         // Remove optimistic element on failure
@@ -253,6 +317,9 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
         setElements(prev => prev.map(el => 
           el.id === elementId ? { ...el, ...processedElement } : el
         ));
+        
+        // Emit real-time event
+        collaboration.emitElementUpdated({ ...currentElement, ...processedElement });
       } else {
         console.error('Failed to update element:', data.error);
         // Rollback on failure
@@ -298,6 +365,9 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
         console.error('Failed to delete element:', data.error);
         // Restore element on failure
         setElements(prev => [...prev, elementToDelete]);
+      } else {
+        // Emit real-time event
+        collaboration.emitElementDeleted(elementId);
       }
       // If successful, element is already removed from UI
     } catch (error) {
@@ -342,6 +412,10 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
           return el;
         }));
         console.log('Vote added successfully');
+        
+        // Emit real-time event
+        collaboration.emitVoteAdded(elementId, data.vote);
+        
         // Refresh elements to get updated vote data
         fetchElements();
       } else {
@@ -387,6 +461,10 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
           return el;
         }));
         console.log('Vote removed successfully');
+        
+        // Emit real-time event
+        collaboration.emitVoteRemoved(elementId);
+        
         // Refresh elements to get updated vote data
         fetchElements();
       } else {
@@ -761,6 +839,14 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    // Send cursor position for collaboration - just the viewport position
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      collaboration.sendCursorPosition(x, y);
+    }
+
     // Handle element resizing
     if (isResizing && selectedElement && resizeHandle) {
       const rect = canvasRef.current?.getBoundingClientRect();
@@ -1642,7 +1728,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
         {/* Help tooltip */}
         {showHelp && (
-          <div className="absolute top-4 right-4 bg-black bg-opacity-75 text-white text-xs rounded-lg p-3 max-w-xs">
+          <div className="absolute top-4 right-4 bg-black bg-opacity-75 text-white text-xs rounded-lg p-3 max-w-xs z-30">
             <div className="flex justify-between items-start mb-2">
               <span className="font-medium">Keyboard Shortcuts</span>
               <button 
@@ -1675,6 +1761,13 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
             ?
           </button>
         )}
+
+        {/* Live Cursors */}
+        <LiveCursors
+          cursors={collaboration.userCursors}
+        />
+
+
       </div>
     </div>
   );
