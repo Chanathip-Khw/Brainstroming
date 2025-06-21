@@ -1,9 +1,14 @@
+// Re-export all types
+export * from './api';
+export * from './canvas';
+
 export interface User {
   id: string;
   name: string;
   email: string;
   avatar: string;
   googleId?: string;
+  backendId?: string;
 }
 
 export interface Team {
@@ -25,7 +30,13 @@ export interface Vote {
   id: string;
   elementId: string;
   userId: string;
-  type: 'LIKE' | 'DISLIKE' | 'STAR' | 'PRIORITY_LOW' | 'PRIORITY_MEDIUM' | 'PRIORITY_HIGH';
+  type:
+    | 'LIKE'
+    | 'DISLIKE'
+    | 'STAR'
+    | 'PRIORITY_LOW'
+    | 'PRIORITY_MEDIUM'
+    | 'PRIORITY_HIGH';
   createdAt: string;
   user: {
     id: string;
@@ -49,24 +60,6 @@ export interface StickyNote {
   };
 }
 
-export interface CanvasElement {
-  id: string;
-  type: 'sticky' | 'text' | 'shape' | 'line';
-  x: number;
-  y: number;
-  width?: number;
-  height?: number;
-  content?: string;
-  color: string;
-  votes?: number;
-  author: string;
-  voteData?: {
-    totalVotes: number;
-    userVoted: boolean;
-    votes: Vote[];
-  };
-}
-
 export interface BoardSettings {
   boardName: string;
   isPublic: boolean;
@@ -81,4 +74,4 @@ export interface BoardSettings {
     role: string;
     avatar: string;
   }[];
-} 
+}

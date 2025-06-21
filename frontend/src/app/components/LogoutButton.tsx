@@ -7,23 +7,23 @@ interface LogoutButtonProps {
   onLogout?: () => void;
 }
 
-export default function LogoutButton({ 
-  className = '', 
+export default function LogoutButton({
+  className = '',
   variant = 'primary',
-  onLogout
+  onLogout,
 }: LogoutButtonProps) {
   const { logout, isLoggingOut } = useLogout();
-  
+
   const handleLogout = async () => {
     // Call the onLogout callback if provided
     if (onLogout) {
       onLogout();
     }
-    
+
     // Use our custom logout hook
     await logout();
   };
-  
+
   // Button styles based on variant
   const getButtonClasses = () => {
     switch (variant) {
@@ -37,7 +37,7 @@ export default function LogoutButton({
         return 'bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md';
     }
   };
-  
+
   return (
     <button
       onClick={handleLogout}
@@ -45,10 +45,12 @@ export default function LogoutButton({
       className={`${getButtonClasses()} ${className} ${isLoggingOut ? 'opacity-70 cursor-not-allowed' : ''}`}
     >
       {variant === 'text' ? (
-        <LogOut className="w-4 h-4" />
+        <LogOut className='w-4 h-4' />
+      ) : isLoggingOut ? (
+        'Logging out...'
       ) : (
-        isLoggingOut ? 'Logging out...' : 'Log out'
+        'Log out'
       )}
     </button>
   );
-} 
+}

@@ -12,7 +12,7 @@ export const Toast: React.FC<ToastProps> = ({
   message,
   type = 'success',
   duration = 3000,
-  onClose
+  onClose,
 }) => {
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -25,11 +25,11 @@ export const Toast: React.FC<ToastProps> = ({
   const getIcon = () => {
     switch (type) {
       case 'success':
-        return <CheckCircle className="w-5 h-5 text-green-500" />;
+        return <CheckCircle className='w-5 h-5 text-green-500' />;
       case 'error':
-        return <AlertCircle className="w-5 h-5 text-red-500" />;
+        return <AlertCircle className='w-5 h-5 text-red-500' />;
       default:
-        return <CheckCircle className="w-5 h-5 text-blue-500" />;
+        return <CheckCircle className='w-5 h-5 text-blue-500' />;
     }
   };
 
@@ -45,16 +45,18 @@ export const Toast: React.FC<ToastProps> = ({
   };
 
   return (
-    <div className={`fixed bottom-4 right-4 z-50 flex items-center p-4 rounded-lg shadow-md border ${getBackgroundColor()} animate-fade-in`}>
-      <div className="flex items-center">
+    <div
+      className={`fixed bottom-4 right-4 z-50 flex items-center p-4 rounded-lg shadow-md border ${getBackgroundColor()} animate-fade-in`}
+    >
+      <div className='flex items-center'>
         {getIcon()}
-        <p className="ml-2 text-sm font-medium text-gray-800">{message}</p>
+        <p className='ml-2 text-sm font-medium text-gray-800'>{message}</p>
       </div>
       <button
         onClick={onClose}
-        className="ml-4 text-gray-400 hover:text-gray-600 focus:outline-none"
+        className='ml-4 text-gray-400 hover:text-gray-600 focus:outline-none'
       >
-        <X className="w-4 h-4" />
+        <X className='w-4 h-4' />
       </button>
     </div>
   );
@@ -67,7 +69,7 @@ interface ToastContainerProps {
 
 export const ToastContainer: React.FC<ToastContainerProps> = ({ children }) => {
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+    <div className='fixed bottom-4 right-4 z-50 flex flex-col gap-2'>
       {children}
     </div>
   );
@@ -89,4 +91,4 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({ children }) => {
 //       '100%': { opacity: '0', transform: 'translateY(10px)' }
 //     }
 //   }
-// } 
+// }

@@ -18,44 +18,44 @@ export async function fetchApi<T = any>(
 ): Promise<T> {
   // Get the current session
   const session = await getSession();
-  
+
   if (!session?.accessToken) {
     throw new Error('No access token available');
   }
-  
+
   // Set up headers with authentication
   const headers = {
     'Content-Type': 'application/json',
     ...options.headers,
-    'Authorization': `Bearer ${session.accessToken}`
+    Authorization: `Bearer ${session.accessToken}`,
   };
-  
+
   // Make the API request
   const response = await fetch(`${API_URL}${endpoint}`, {
     ...options,
-    headers
+    headers,
   });
-  
+
   // Handle successful responses
   if (response.ok) {
     // For 204 No Content responses, return empty object
     if (response.status === 204) {
       return {} as T;
     }
-    
+
     // Parse JSON response
     return response.json();
   }
-  
+
   // Handle error responses
   const errorData = await response.json().catch(() => ({}));
   const apiError: ApiError = {
     error: errorData.error || 'Unknown error',
     message: errorData.message || 'An unexpected error occurred',
     code: errorData.code,
-    status: response.status
+    status: response.status,
   };
-  
+
   // Handle token expiration
   if (response.status === 401 && apiError.code === 'TOKEN_EXPIRED') {
     // If we have a session error, the token refresh failed
@@ -65,41 +65,41 @@ export async function fetchApi<T = any>(
       await signOut({ redirect: true, callbackUrl: '/auth/signin' });
       throw new Error('Session expired');
     }
-    
+
     // Otherwise, the token should have been refreshed automatically
     // Try the request again (but only once to avoid infinite loops)
     console.log('Token expired. Retrying request after refresh...');
-    
+
     // Get fresh session after token refresh
     const freshSession = await getSession();
-    
+
     if (!freshSession?.accessToken) {
       throw new Error('Failed to refresh token');
     }
-    
+
     // Retry with new token
     const retryResponse = await fetch(`${API_URL}${endpoint}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
         ...options.headers,
-        'Authorization': `Bearer ${freshSession.accessToken}`
-      }
+        Authorization: `Bearer ${freshSession.accessToken}`,
+      },
     });
-    
+
     if (retryResponse.ok) {
       return retryResponse.json();
     }
-    
+
     // If retry fails, throw the error
     const retryErrorData = await retryResponse.json().catch(() => ({}));
     throw {
       error: retryErrorData.error || 'Request failed',
       message: retryErrorData.message || 'Request failed after token refresh',
-      status: retryResponse.status
+      status: retryResponse.status,
     };
   }
-  
+
   // For other errors, throw the error object
   throw apiError;
 }
@@ -116,17 +116,19 @@ export const api = {
     const response = await fetch(`${API_URL}${endpoint}`, {
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': session?.accessToken ? `Bearer ${session.accessToken}` : '',
+        Authorization: session?.accessToken
+          ? `Bearer ${session.accessToken}`
+          : '',
       },
     });
-    
+
     if (!response.ok) {
       throw new Error(`API error: ${response.statusText}`);
     }
-    
+
     return response.json();
   },
-  
+
   /**
    * Make a POST request to the backend API
    */
@@ -136,18 +138,20 @@ export const api = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': session?.accessToken ? `Bearer ${session.accessToken}` : '',
+        Authorization: session?.accessToken
+          ? `Bearer ${session.accessToken}`
+          : '',
       },
       body: JSON.stringify(data),
     });
-    
+
     if (!response.ok) {
       throw new Error(`API error: ${response.statusText}`);
     }
-    
+
     return response.json();
   },
-  
+
   /**
    * Make a PUT request to the backend API
    */
@@ -157,18 +161,20 @@ export const api = {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': session?.accessToken ? `Bearer ${session.accessToken}` : '',
+        Authorization: session?.accessToken
+          ? `Bearer ${session.accessToken}`
+          : '',
       },
       body: JSON.stringify(data),
     });
-    
+
     if (!response.ok) {
       throw new Error(`API error: ${response.statusText}`);
     }
-    
+
     return response.json();
   },
-  
+
   /**
    * Make a DELETE request to the backend API
    */
@@ -178,14 +184,16 @@ export const api = {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': session?.accessToken ? `Bearer ${session.accessToken}` : '',
+        Authorization: session?.accessToken
+          ? `Bearer ${session.accessToken}`
+          : '',
       },
     });
-    
+
     if (!response.ok) {
       throw new Error(`API error: ${response.statusText}`);
     }
-    
+
     return response.json();
-  }
-}; 
+  },
+};

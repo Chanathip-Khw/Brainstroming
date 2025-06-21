@@ -16,18 +16,24 @@ export function useLogout() {
       // If we have a backend session, revoke it first
       if (session?.accessToken) {
         try {
-          console.log('Calling backend logout endpoint with token:', session.accessToken);
-          
+          console.log(
+            'Calling backend logout endpoint with token:',
+            session.accessToken
+          );
+
           // Call backend logout endpoint directly to invalidate the session
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/auth/logout`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${session.accessToken}`,
-              // Don't set Content-Type to avoid empty body error
-            },
-            // No body needed for logout
-          });
-          
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/auth/logout`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${session.accessToken}`,
+                // Don't set Content-Type to avoid empty body error
+              },
+              // No body needed for logout
+            }
+          );
+
           if (response.ok) {
             console.log('Backend logout successful');
           } else {
@@ -56,6 +62,6 @@ export function useLogout() {
 
   return {
     logout,
-    isLoggingOut
+    isLoggingOut,
   };
-} 
+}
