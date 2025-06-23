@@ -17,6 +17,17 @@ import { SessionTimer } from '../SessionTimer';
 import { SessionTemplates } from '../SessionTemplates';
 import { Clock, Users } from 'lucide-react';
 import { useCollaboration } from '../../hooks/useCollaboration';
+import { useElementData } from '../../hooks/useElementData';
+import { useElementCRUD } from '../../hooks/useElementCRUD';
+import { useElementVoting } from '../../hooks/useElementVoting';
+import { useElementDragging } from '../../hooks/useElementDragging';
+import { useElementResizing } from '../../hooks/useElementResizing';
+import { useCanvasPanZoom } from '../../hooks/useCanvasPanZoom';
+import { StickyNoteRenderer } from './StickyNoteRenderer';
+import { TextElementRenderer } from './TextElementRenderer';
+import { ShapeRenderer } from './ShapeRenderer';
+import { GroupRenderer } from './GroupRenderer';
+import { ElementRenderer } from './ElementRenderer';
 import LiveCursors from '../LiveCursors';
 import { fetchApi } from '../../lib/api';
 
@@ -1367,111 +1378,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     ));
   };
 
-  const renderShape = (element: CanvasElement) => {
-    const shapeType = element.styleData?.shapeType || 'circle';
-    const color = element.styleData?.color || '#fbbf24';
-    const width = element.width;
-    const height = element.height;
 
-    const commonProps = {
-      fill: color,
-      stroke: selectedElement === element.id ? '#6366f1' : color,
-      strokeWidth: selectedElement === element.id ? 2 : 0,
-    };
-
-    switch (shapeType) {
-      case 'circle':
-        return (
-          <svg width={width} height={height} className='pointer-events-none'>
-            <ellipse
-              cx={width / 2}
-              cy={height / 2}
-              rx={width / 2 - 2}
-              ry={height / 2 - 2}
-              {...commonProps}
-            />
-          </svg>
-        );
-
-      case 'rectangle':
-        return (
-          <svg width={width} height={height} className='pointer-events-none'>
-            <rect
-              x='2'
-              y='2'
-              width={width - 4}
-              height={height - 4}
-              rx='4'
-              {...commonProps}
-            />
-          </svg>
-        );
-
-      case 'triangle':
-        return (
-          <svg width={width} height={height} className='pointer-events-none'>
-            <polygon
-              points={`${width / 2},4 ${width - 4},${height - 4} 4,${height - 4}`}
-              {...commonProps}
-            />
-          </svg>
-        );
-
-      case 'diamond':
-        return (
-          <svg width={width} height={height} className='pointer-events-none'>
-            <polygon
-              points={`${width / 2},4 ${width - 4},${height / 2} ${width / 2},${height - 4} 4,${height / 2}`}
-              {...commonProps}
-            />
-          </svg>
-        );
-
-      case 'star':
-        const centerX = width / 2;
-        const centerY = height / 2;
-        const outerRadius = Math.min(width, height) / 2 - 4;
-        const innerRadius = outerRadius * 0.4;
-        let points = '';
-
-        for (let i = 0; i < 10; i++) {
-          const angle = (i * Math.PI) / 5;
-          const radius = i % 2 === 0 ? outerRadius : innerRadius;
-          const x = centerX + radius * Math.cos(angle - Math.PI / 2);
-          const y = centerY + radius * Math.sin(angle - Math.PI / 2);
-          points += `${x},${y} `;
-        }
-
-        return (
-          <svg width={width} height={height} className='pointer-events-none'>
-            <polygon points={points.trim()} {...commonProps} />
-          </svg>
-        );
-
-      case 'arrow':
-        return (
-          <svg width={width} height={height} className='pointer-events-none'>
-            <polygon
-              points={`4,${height / 2} ${width * 0.7},4 ${width * 0.7},${height * 0.3} ${width - 4},${height / 2} ${width * 0.7},${height * 0.7} ${width * 0.7},${height - 4}`}
-              {...commonProps}
-            />
-          </svg>
-        );
-
-      default:
-        return (
-          <svg width={width} height={height} className='pointer-events-none'>
-            <ellipse
-              cx={width / 2}
-              cy={height / 2}
-              rx={width / 2 - 2}
-              ry={height / 2 - 2}
-              {...commonProps}
-            />
-          </svg>
-        );
-    }
-  };
 
   if (loading) {
     return (
@@ -1740,179 +1647,106 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
               if (b.type === 'GROUP' && a.type !== 'GROUP') return 1;
               return 0;
             })
-            .map(element => (
-              <div
-                key={element.id}
-                className={`absolute cursor-pointer select-none ${
-                  element.type === 'TEXT'
-                    ? `text-gray-800 ${selectedElement === element.id ? 'ring-2 ring-indigo-500 bg-white bg-opacity-20 rounded' : ''}`
-                    : element.type === 'SHAPE'
-                      ? `${selectedElement === element.id ? 'ring-2 ring-indigo-500 rounded' : ''}`
-                      : element.type === 'GROUP'
-                        ? `border-2 border-dashed ${getGroupColor(element).border} ${getGroupColor(element).bg} ${selectedElement === element.id ? `${getGroupColor(element).selectedBorder} ${getGroupColor(element).selectedBg}` : ''}`
-                        : `${getElementColor(element)} p-3 rounded-lg shadow-sm flex flex-col justify-between ${selectedElement === element.id ? 'ring-2 ring-indigo-500' : ''}`
-                }`}
-                style={{
-                  left: `${element.positionX}px`,
-                  top: `${element.positionY}px`,
-                  width: `${element.width}px`,
-                  height: `${element.height}px`,
-                  transform: 'translate(-50%, -50%)',
-                  fontSize: element.type === 'TEXT' ? '16px' : undefined,
-                  fontWeight: element.type === 'TEXT' ? '500' : undefined,
-                  color:
-                    element.type === 'TEXT'
-                      ? element.styleData?.color || '#374151'
-                      : undefined,
-                  minHeight: element.type === 'TEXT' ? '30px' : undefined,
-                }}
-                onClick={e => handleElementClick(element.id, e)}
-                onDoubleClick={e => handleElementDoubleClick(element.id, e)}
-                onMouseDown={e => handleElementMouseDown(element.id, e)}
-              >
-                {element.type === 'TEXT' ? (
-                  // Text element rendering
-                  editingElement === element.id ? (
-                    <input
-                      type='text'
-                      value={editingText}
-                      onChange={e => setEditingText(e.target.value)}
-                      onBlur={handleTextSubmit}
-                      onKeyPress={e => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleTextSubmit();
-                        }
-                      }}
-                      className='border-none outline-none bg-transparent text-inherit font-inherit'
-                      style={{
-                        fontSize: 'inherit',
-                        fontWeight: 'inherit',
-                        color: 'inherit',
-                        width: '100%',
-                        resize: 'none',
-                      }}
-                      autoFocus
-                    />
-                  ) : (
-                    <div
-                      className='w-full h-full flex items-center justify-center overflow-hidden p-2'
-                      style={{
-                        wordWrap: 'break-word',
-                        lineHeight: '1.4',
-                        textAlign: 'center',
-                      }}
-                    >
-                      {element.content || (
-                        <span
-                          className='italic'
-                          style={{ color: getPlaceholderColor(element) }}
-                        >
-                          Add your text...
-                        </span>
-                      )}
-                    </div>
-                  )
-                ) : element.type === 'SHAPE' ? (
-                  // Shape element rendering
-                  renderShape(element)
-                ) : element.type === 'GROUP' ? (
-                  // Group element rendering
-                  <div className='w-full h-full relative'>
-                    {/* Group label */}
-                    <div
-                      className={`absolute -top-6 left-0 px-2 py-1 rounded text-xs font-medium ${getGroupColor(element).label}`}
-                    >
-                      {editingElement === element.id ? (
-                        <input
-                          type='text'
-                          value={editingText}
-                          onChange={e => setEditingText(e.target.value)}
-                          onBlur={handleTextSubmit}
-                          onKeyPress={e => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleTextSubmit();
-                            }
-                          }}
-                          className='border-none outline-none bg-transparent text-inherit font-inherit'
-                          style={{ fontSize: 'inherit', width: '80px' }}
-                          autoFocus
-                        />
-                      ) : (
-                        element.content || 'Group Label'
-                      )}
-                    </div>
+            .map(element => {
+              // Handle sticky notes with dedicated component
+              if (element.type === 'STICKY_NOTE') {
+                return (
+                  <StickyNoteRenderer
+                    key={element.id}
+                    element={element}
+                    isSelected={selectedElement === element.id}
+                    isEditing={editingElement === element.id}
+                    editingText={editingText}
+                    tool={tool}
+                    hasUserVoted={hasUserVotedHook}
+                    getElementColor={getElementColor}
+                    getPlaceholderColor={getPlaceholderColor}
+                    renderResizeHandles={renderResizeHandles}
+                    onElementClick={handleElementClick}
+                    onElementDoubleClick={handleElementDoubleClick}
+                    onElementMouseDown={handleElementMouseDown}
+                    onEditingTextChange={setEditingText}
+                    onTextSubmit={handleTextSubmit}
+                  />
+                );
+              }
 
-                    {/* Group stats */}
-                    <div className='absolute -bottom-6 right-0 flex gap-2'>
-                      {/* Item count */}
-                      <div className='bg-gray-600 text-white px-2 py-1 rounded text-xs'>
-                        {getElementsInGroup(element.id).length} items
-                      </div>
+              // Handle text elements with dedicated component
+              if (element.type === 'TEXT') {
+                return (
+                  <TextElementRenderer
+                    key={element.id}
+                    element={element}
+                    isSelected={selectedElement === element.id}
+                    isEditing={editingElement === element.id}
+                    editingText={editingText}
+                    getPlaceholderColor={getPlaceholderColor}
+                    renderResizeHandles={renderResizeHandles}
+                    onElementClick={handleElementClick}
+                    onElementDoubleClick={handleElementDoubleClick}
+                    onElementMouseDown={handleElementMouseDown}
+                    onEditingTextChange={setEditingText}
+                    onTextSubmit={handleTextSubmit}
+                  />
+                );
+              }
 
-                      {/* Vote count (only show if there are votes) */}
-                      {getGroupVoteCount(element.id) > 0 && (
-                        <div className='bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold'>
-                          {getGroupVoteCount(element.id)} votes
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  // Non-text element rendering (sticky notes, shapes)
-                  <>
-                    {/* Vote count indicator (only for sticky notes) */}
-                    {element.type === 'STICKY_NOTE' &&
-                      (element._count?.votes || 0) > 0 && (
-                        <div className='absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold z-10'>
-                          {element._count?.votes}
-                        </div>
-                      )}
+              // Handle group elements with dedicated component
+              if (element.type === 'GROUP') {
+                return (
+                  <GroupRenderer
+                    key={element.id}
+                    element={element}
+                    isSelected={selectedElement === element.id}
+                    isEditing={editingElement === element.id}
+                    editingText={editingText}
+                    getElementsInGroup={getElementsInGroup}
+                    getGroupVoteCount={getGroupVoteCount}
+                    getGroupColor={getGroupColor}
+                    renderResizeHandles={renderResizeHandles}
+                    onElementClick={handleElementClick}
+                    onElementDoubleClick={handleElementDoubleClick}
+                    onElementMouseDown={handleElementMouseDown}
+                    onEditingTextChange={setEditingText}
+                    onTextSubmit={handleTextSubmit}
+                  />
+                );
+              }
 
-                    {/* Voting indicator when vote tool is selected (only for sticky notes) */}
-                    {tool === 'vote' && element.type === 'STICKY_NOTE' && (
-                      <div
-                        className={`absolute -top-1 -left-1 w-3 h-3 rounded-full z-10 ${
-                          hasUserVoted(element) ? 'bg-green-500' : 'bg-blue-500'
-                        } opacity-70`}
-                      />
-                    )}
+              // Handle shape elements with dedicated component
+              if (element.type === 'SHAPE') {
+                return (
+                  <ShapeRenderer
+                    key={element.id}
+                    element={element}
+                    isSelected={selectedElement === element.id}
+                    renderResizeHandles={renderResizeHandles}
+                    onElementClick={handleElementClick}
+                    onElementDoubleClick={handleElementDoubleClick}
+                    onElementMouseDown={handleElementMouseDown}
+                  />
+                );
+              }
 
-                    {editingElement === element.id ? (
-                      <textarea
-                        value={editingText}
-                        onChange={e => setEditingText(e.target.value)}
-                        onBlur={handleTextSubmit}
-                        onKeyPress={e => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            handleTextSubmit();
-                          }
-                        }}
-                        className='w-full h-full resize-none border-none outline-none bg-transparent text-sm'
-                        autoFocus
-                      />
-                    ) : (
-                      <div className='text-sm text-gray-800 mb-2 flex-1 overflow-hidden'>
-                        {element.content || (
-                          <span
-                            className='italic'
-                            style={{ color: getPlaceholderColor(element) }}
-                          >
-                            {element.type === 'STICKY_NOTE'
-                              ? 'Add your idea...'
-                              : 'Click to edit...'}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
-                {/* Resize handles */}
-                {renderResizeHandles(element)}
-              </div>
-            ))}
+              // Handle all other element types with the ElementRenderer
+              return (
+                <ElementRenderer
+                  key={element.id}
+                  element={element}
+                  isSelected={selectedElement === element.id}
+                  isEditing={editingElement === element.id}
+                  editingText={editingText}
+                  getElementColor={getElementColor}
+                  getPlaceholderColor={getPlaceholderColor}
+                  renderResizeHandles={renderResizeHandles}
+                  onElementClick={handleElementClick}
+                  onElementDoubleClick={handleElementDoubleClick}
+                  onElementMouseDown={handleElementMouseDown}
+                  onEditingTextChange={setEditingText}
+                  onTextSubmit={handleTextSubmit}
+                />
+              );
+            })}
         </div>
 
         <div className='absolute bottom-4 right-4 bg-white rounded-lg shadow-lg p-2 flex items-center gap-2'>
