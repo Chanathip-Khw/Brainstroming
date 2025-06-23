@@ -8,14 +8,11 @@ import {
   Minus,
   Move,
   Vote,
-  Trash2,
-  Edit3,
   Group,
 } from 'lucide-react';
 import { User } from '../../types';
 import { SessionTimer } from '../SessionTimer';
 import { SessionTemplates } from '../SessionTemplates';
-import { Clock, Users } from 'lucide-react';
 import { useCollaboration } from '../../hooks/useCollaboration';
 import { useElementData } from '../../hooks/useElementData';
 import { useElementCRUD } from '../../hooks/useElementCRUD';
@@ -28,6 +25,13 @@ import { TextElementRenderer } from './TextElementRenderer';
 import { ShapeRenderer } from './ShapeRenderer';
 import { GroupRenderer } from './GroupRenderer';
 import { ElementRenderer } from './ElementRenderer';
+import { ZoomControls } from './ZoomControls';
+import { HelpTooltip } from './HelpTooltip';
+import { ColorPicker } from './ColorPicker';
+import { ToolPanel } from './ToolPanel';
+import { SessionControls } from './SessionControls';
+import { ShapeSelector } from './ShapeSelector';
+import { ElementPropertiesPanel } from './ElementPropertiesPanel';
 import LiveCursors from '../LiveCursors';
 import { fetchApi } from '../../lib/api';
 import type { CanvasElement } from '../../hooks/useElementData';
@@ -706,187 +710,45 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       )}
 
       <div className='bg-white border-r border-gray-200 p-4 w-64 flex flex-col gap-4'>
-        <div>
-          <h3 className='text-sm font-medium text-gray-700 mb-3'>Tools</h3>
-          <div className='grid grid-cols-2 gap-2'>
-            {tools.map(toolItem => (
-              <button
-                key={toolItem.id}
-                onClick={() => setTool(toolItem.id)}
-                className={`p-3 rounded-lg flex flex-col items-center gap-1 transition-colors ${
-                  tool === toolItem.id
-                    ? 'bg-indigo-100 text-indigo-700'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <toolItem.icon className='w-5 h-5' />
-                <span className='text-xs'>{toolItem.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+        <ToolPanel
+          tools={tools}
+          selectedTool={tool}
+          onToolSelect={setTool}
+        />
 
-        <div>
-          <h3 className='text-sm font-medium text-gray-700 mb-3'>Colors</h3>
-          <div className='grid grid-cols-4 gap-2'>
-            {colors.map(color => (
-              <button
-                key={color}
-                onClick={() => setSelectedColor(color)}
-                className={`w-8 h-8 rounded-lg border-2 ${
-                  selectedColor === color
-                    ? 'border-gray-800'
-                    : 'border-gray-300'
-                }`}
-                style={{ backgroundColor: color }}
-              />
-            ))}
-          </div>
-        </div>
+        <ColorPicker
+          colors={colors}
+          selectedColor={selectedColor}
+          onColorSelect={setSelectedColor}
+          title="Colors"
+        />
 
-        <div>
-          <h3 className='text-sm font-medium text-gray-700 mb-3'>Session</h3>
-          <div className='space-y-2'>
-            <button
-              onClick={() => setShowTemplatesModal(true)}
-              className='w-full p-3 rounded-lg bg-purple-500 hover:bg-purple-600 text-white transition-colors flex items-center gap-2'
-              title='Session Templates'
-            >
-              <Users className='w-5 h-5' />
-              <span className='text-sm font-medium'>Templates</span>
-            </button>
+        <SessionControls
+          currentTemplate={currentTemplate}
+          onOpenTemplates={() => setShowTemplatesModal(true)}
+          onOpenTimer={() => setShowTimerModal(true)}
+        />
 
-            <button
-              onClick={() => setShowTimerModal(true)}
-              className={`w-full p-3 rounded-lg transition-all duration-200 flex items-center gap-2 ${
-                currentTemplate
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-              }`}
-              title='Session Timer'
-            >
-              <Clock className='w-5 h-5' />
-              <span className='text-sm font-medium'>
-                {currentTemplate ? 'Running Timer' : 'Timer'}
-              </span>
-            </button>
-          </div>
-        </div>
+        <ShapeSelector
+          shapes={shapes}
+          selectedShape={selectedShape}
+          onShapeSelect={setSelectedShape}
+          isVisible={tool === 'SHAPE'}
+        />
 
-        {tool === 'SHAPE' && (
-          <div>
-            <h3 className='text-sm font-medium text-gray-700 mb-3'>Shapes</h3>
-            <div className='grid grid-cols-2 gap-2'>
-              {shapes.map(shape => (
-                <button
-                  key={shape.id}
-                  onClick={() => setSelectedShape(shape.id)}
-                  className={`p-2 rounded-lg border-2 text-xs font-medium transition-colors ${
-                    selectedShape === shape.id
-                      ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                      : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  {shape.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {selectedElement && (
-          <div>
-            <h3 className='text-sm font-medium text-gray-700 mb-3'>
-              Selected Element
-            </h3>
-            <div className='space-y-2'>
-              {(() => {
-                const element = elements.find(el => el.id === selectedElement);
-                const hasEditableText =
-                  element &&
-                  (element.type === 'TEXT' ||
-                    element.type === 'STICKY_NOTE' ||
-                    element.type === 'GROUP');
-
-                return (
-                  <>
-                    {hasEditableText && (
-                      <button
-                        onClick={() => {
-                          if (element) {
-                            setEditingElement(selectedElement);
-                            setEditingText(element.content || '');
-                          }
-                        }}
-                        className='w-full p-2 text-left text-sm bg-gray-100 hover:bg-gray-200 rounded flex items-center gap-2'
-                      >
-                        <Edit3 className='w-4 h-4' />
-                        {element?.type === 'GROUP' ? 'Edit Label' : 'Edit Text'}
-                      </button>
-                    )}
-
-                    {/* Color picker for selected group */}
-                    {element?.type === 'GROUP' && (
-                      <div>
-                        <h4 className='text-xs font-medium text-gray-600 mb-2'>
-                          Group Color
-                        </h4>
-                        <div className='grid grid-cols-4 gap-2'>
-                          {colors.map(color => (
-                            <button
-                              key={color}
-                              onClick={() =>
-                                updateElementHook(selectedElement, {
-                                  styleData: { ...element.styleData, color },
-                                })
-                              }
-                              className={`w-6 h-6 rounded border-2 ${
-                                element.styleData?.color === color
-                                  ? 'border-gray-800'
-                                  : 'border-gray-300'
-                              }`}
-                              style={{ backgroundColor: color }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {element?.type === 'GROUP' && (
-                      <div className='p-2 bg-blue-50 rounded text-sm'>
-                        <div className='font-medium text-blue-800 mb-1'>
-                          Group Info
-                        </div>
-                        <div className='text-blue-600 space-y-1'>
-                          <div>
-                            Contains{' '}
-                            {getElementsInGroup(selectedElement).length} items
-                          </div>
-                          {getGroupVoteCount(selectedElement) > 0 && (
-                            <div className='font-semibold text-red-600'>
-                              Total votes: {getGroupVoteCount(selectedElement)}
-                            </div>
-                          )}
-                        </div>
-                        <div className='text-xs text-blue-500 mt-1'>
-                          Drag sticky notes into this group to organize them
-                        </div>
-                      </div>
-                    )}
-
-                    <button
-                      onClick={() => deleteElement(selectedElement)}
-                      className='w-full p-2 text-left text-sm bg-red-100 text-red-700 hover:bg-red-200 rounded flex items-center gap-2'
-                    >
-                      <Trash2 className='w-4 h-4' />
-                      Delete
-                    </button>
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-        )}
+        <ElementPropertiesPanel
+          selectedElement={selectedElement}
+          elements={elements}
+          colors={colors}
+          onEditElement={(elementId, content) => {
+            setEditingElement(elementId);
+            setEditingText(content);
+          }}
+          onDeleteElement={deleteElement}
+          onUpdateElement={updateElementHook}
+          getElementsInGroup={getElementsInGroup}
+          getGroupVoteCount={getGroupVoteCount}
+        />
       </div>
 
       <div className='flex-1 relative overflow-hidden'>
@@ -1028,81 +890,17 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
             })}
         </div>
 
-        <div className='absolute bottom-4 right-4 bg-white rounded-lg shadow-lg p-2 flex items-center gap-2'>
-          <button
-            onClick={zoomOut}
-            className='p-2 hover:bg-gray-100 rounded text-lg font-bold'
-            title='Zoom out (Ctrl + -)'
-          >
-            -
-          </button>
-          <button
-            onClick={resetView}
-            className='text-sm font-medium w-16 text-center hover:bg-gray-100 rounded px-2 py-1'
-            title='Reset zoom (Ctrl + 0)'
-          >
-            {Math.round(scale * 100)}%
-          </button>
-          <button
-            onClick={zoomIn}
-            className='p-2 hover:bg-gray-100 rounded text-lg font-bold'
-            title='Zoom in (Ctrl + +)'
-          >
-            +
-          </button>
-        </div>
+        <ZoomControls
+          scale={scale}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+          onResetView={resetView}
+        />
 
-        {/* Help tooltip */}
-        {showHelp && (
-          <div className='absolute top-4 right-4 bg-black bg-opacity-75 text-white text-xs rounded-lg p-3 max-w-xs z-30'>
-            <div className='flex justify-between items-start mb-2'>
-              <span className='font-medium'>Keyboard Shortcuts</span>
-              <button
-                onClick={() => setShowHelp(false)}
-                className='text-white hover:text-gray-300 ml-2'
-              >
-                ×
-              </button>
-            </div>
-            <div className='space-y-1'>
-              <div>
-                <strong>Scroll:</strong> Zoom in/out
-              </div>
-              <div>
-                <strong>Middle Click + Drag:</strong> Pan canvas
-              </div>
-              <div>
-                <strong>Delete:</strong> Remove selected element
-              </div>
-              <div>
-                <strong>Escape:</strong> Deselect element
-              </div>
-              <div>
-                <strong>+/- Keys:</strong> Zoom in/out
-              </div>
-              <div>
-                <strong>Arrow Keys:</strong> Pan canvas
-              </div>
-              <div>
-                <strong>Ctrl + 0:</strong> Reset zoom & center
-              </div>
-              <div>
-                <strong>Groups:</strong> Drag sticky notes into groups
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Show help button when help is hidden */}
-        {!showHelp && (
-          <button
-            onClick={() => setShowHelp(true)}
-            className='absolute top-4 right-4 bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 text-sm'
-            title='Show keyboard shortcuts'
-          >
-            ?
-          </button>
-        )}
+        <HelpTooltip
+          showHelp={showHelp}
+          onToggleHelp={setShowHelp}
+        />
 
         {/* Live Cursors */}
         <LiveCursors cursors={collaboration.userCursors} />
