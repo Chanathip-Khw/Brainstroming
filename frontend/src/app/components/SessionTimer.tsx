@@ -3,6 +3,7 @@ import { Play, Pause, RotateCcw, Clock, Bell, Settings } from 'lucide-react';
 
 interface SessionTimerProps {
   onTimerComplete?: (activity: string) => void;
+  onStopSession?: () => void;
   currentTemplate?: any;
   currentActivityIndex?: number;
   templateSessionId?: string | null;
@@ -65,6 +66,7 @@ const PRESET_ACTIVITIES: TimerActivity[] = [
 
 export const SessionTimer: React.FC<SessionTimerProps> = ({
   onTimerComplete,
+  onStopSession,
   currentTemplate,
   currentActivityIndex = 0,
   templateSessionId,
@@ -210,12 +212,19 @@ export const SessionTimer: React.FC<SessionTimerProps> = ({
   };
 
   const resetTimer = () => {
+    // Reset the current activity timer back to its full duration
+    setIsRunning(false);
     setIsPaused(false);
     setTimeRemaining(selectedActivity?.duration || 0);
     // Keep timer display visible but stopped
   };
 
   const stopTimer = () => {
+    // If this is a template session, notify parent to clear session
+    if (selectedActivity?.id.startsWith('template-') && onStopSession) {
+      onStopSession();
+    }
+    
     setIsRunning(false);
     setIsPaused(false);
     setSelectedActivity(null);

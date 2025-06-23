@@ -43,7 +43,7 @@ export const SessionControls: React.FC<SessionControlsProps> = ({
         {currentTemplate && (
           <div className='p-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700'>
             <div className='font-medium mb-1'>Active Session</div>
-            <div>{currentTemplate.title}</div>
+            <div>{currentTemplate.name}</div>
           </div>
         )}
       </div>

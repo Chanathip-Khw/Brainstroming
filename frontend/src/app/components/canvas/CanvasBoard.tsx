@@ -20,6 +20,7 @@ import { useElementVoting } from '../../hooks/useElementVoting';
 import { useElementDragging } from '../../hooks/useElementDragging';
 import { useElementResizing } from '../../hooks/useElementResizing';
 import { useCanvasInteraction } from '../../hooks/useCanvasInteraction';
+import { useSessionManagement } from '../../hooks/useSessionManagement';
 import { StickyNoteRenderer } from './StickyNoteRenderer';
 import { TextElementRenderer } from './TextElementRenderer';
 import { ShapeRenderer } from './ShapeRenderer';
@@ -35,6 +36,7 @@ import { ElementPropertiesPanel } from './ElementPropertiesPanel';
 import LiveCursors from '../LiveCursors';
 import { fetchApi } from '../../lib/api';
 import type { CanvasElement } from '../../hooks/useElementData';
+import { CANVAS_COLORS, CANVAS_SHAPES, CANVAS_TOOLS } from '../../constants/canvas';
 
 interface CanvasBoardProps {
   user: User;
@@ -54,16 +56,20 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   const [editingText, setEditingText] = useState('');
   const [showHelp, setShowHelp] = useState(true);
   const [selectedShape, setSelectedShape] = useState('circle');
-  const [timerNotification, setTimerNotification] = useState<string | null>(
-    null
-  );
-  const [currentTemplate, setCurrentTemplate] = useState<any>(null);
-  const [currentActivityIndex, setCurrentActivityIndex] = useState(0);
-  const [templateSessionId, setTemplateSessionId] = useState<string | null>(
-    null
-  );
-  const [showTimerModal, setShowTimerModal] = useState(false);
-  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
+  // Session management hook
+  const {
+    currentTemplate,
+    currentActivityIndex,
+    templateSessionId,
+    timerNotification,
+    showTimerModal,
+    showTemplatesModal,
+    handleTimerComplete,
+    handleStartTemplate,
+    clearCurrentSession,
+    setShowTimerModal,
+    setShowTemplatesModal,
+  } = useSessionManagement();
 
   // Real-time collaboration
   const collaboration = useCollaboration({
@@ -207,36 +213,10 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     collaboration,
   });
 
-  const colors = [
-    '#fbbf24',
-    '#3b82f6',
-    '#10b981',
-    '#ec4899',
-    '#8b5cf6',
-    '#f97316',
-    '#ef4444',
-    '#6b7280',
-  ];
-
-  const shapes = [
-    { id: 'circle', name: 'Circle' },
-    { id: 'rectangle', name: 'Rectangle' },
-    { id: 'triangle', name: 'Triangle' },
-    { id: 'diamond', name: 'Diamond' },
-    { id: 'star', name: 'Star' },
-    { id: 'arrow', name: 'Arrow' },
-  ];
-
-  const tools = [
-    { id: 'select', icon: Hand, label: 'Select' },
-    { id: 'STICKY_NOTE', icon: Square, label: 'Sticky Note' },
-    { id: 'TEXT', icon: Type, label: 'Text' },
-    { id: 'SHAPE', icon: Circle, label: 'Shape' },
-    { id: 'GROUP', icon: Group, label: 'Group' },
-    { id: 'line', icon: Minus, label: 'Line' },
-    { id: 'move', icon: Move, label: 'Pan' },
-    { id: 'vote', icon: Vote, label: 'Vote' },
-  ];
+  // Import constants
+  const colors = CANVAS_COLORS;
+  const shapes = CANVAS_SHAPES;
+  const tools = CANVAS_TOOLS;
 
   // Wrapper for deleteElement that also clears selection
   const deleteElement = async (elementId: string) => {
@@ -350,39 +330,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     await updateElementHook(elementId, { styleData: restStyleData });
   };
 
-  // Handle timer completion
-  const handleTimerComplete = (activityName: string) => {
-    setTimerNotification(activityName);
 
-    // If running a template, advance to next activity
-    if (
-      currentTemplate &&
-      currentActivityIndex < currentTemplate.activities.length - 1
-    ) {
-      setTimeout(() => {
-        setCurrentActivityIndex(prev => prev + 1);
-        setTimerNotification(null);
-      }, 3000);
-    } else {
-      // Template completed or single timer
-      setTimeout(() => {
-        setTimerNotification(null);
-        setCurrentTemplate(null);
-        setCurrentActivityIndex(0);
-        setTemplateSessionId(null);
-      }, 5000);
-    }
-  };
-
-  // Handle starting a session template
-  const handleStartTemplate = (template: any) => {
-    // Generate unique session ID to force restart even for same template
-    const sessionId = `${template.id}-${Date.now()}`;
-    setTemplateSessionId(sessionId);
-    setCurrentTemplate(template);
-    setCurrentActivityIndex(0);
-    // The SessionTimer will automatically start the first activity
-  };
 
   // Elements are now automatically loaded by the useElementData hook
 
@@ -684,6 +632,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       {/* Timer and Templates modals */}
       <SessionTimer
         onTimerComplete={handleTimerComplete}
+        onStopSession={clearCurrentSession}
         currentTemplate={currentTemplate}
         currentActivityIndex={currentActivityIndex}
         templateSessionId={templateSessionId}
