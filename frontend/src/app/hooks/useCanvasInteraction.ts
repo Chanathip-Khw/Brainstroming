@@ -1,15 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
 
 interface UseCanvasInteractionProps {
+  tool: string;
+  selectedElement: string | null;
+  setSelectedElement: (id: string | null) => void;
+  setEditingElement: (id: string | null) => void;
   deleteElement: (elementId: string) => Promise<void>;
 }
 
-export const useCanvasInteraction = ({ deleteElement }: UseCanvasInteractionProps) => {
-  // Canvas interaction state
+export const useCanvasInteraction = ({
+  tool,
+  selectedElement,
+  setSelectedElement,
+  setEditingElement,
+  deleteElement,
+}: UseCanvasInteractionProps) => {
+  // Canvas viewport state
   const [scale, setScale] = useState(1);
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
-  const [selectedElement, setSelectedElement] = useState<string | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 
@@ -28,6 +37,67 @@ export const useCanvasInteraction = ({ deleteElement }: UseCanvasInteractionProp
       return newScale;
     });
   }, []);
+
+  // Handle mouse down for panning
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // Pan with left click when move tool is selected
+    if (tool === 'move' && e.button === 0) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ x: e.clientX, y: e.clientY });
+      return;
+    }
+
+    // Middle mouse button for panning (always available)
+    if (e.button === 1) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ x: e.clientX, y: e.clientY });
+    }
+  }, [tool]);
+
+  // Handle mouse move for panning
+  const handleMouseMoveForPanning = useCallback((e: React.MouseEvent) => {
+    if (isPanning) {
+      const deltaX = e.clientX - panStart.x;
+      const deltaY = e.clientY - panStart.y;
+
+      setPanX(prev => prev + deltaX);
+      setPanY(prev => prev + deltaY);
+
+      setPanStart({ x: e.clientX, y: e.clientY });
+    }
+  }, [isPanning, panStart]);
+
+  // Handle mouse up for ending pan
+  const handleMouseUpForPanning = useCallback(() => {
+    setIsPanning(false);
+  }, []);
+
+  // Reset zoom and center view
+  const resetView = useCallback(() => {
+    setScale(1);
+    setPanX(0);
+    setPanY(0);
+  }, []);
+
+  // Zoom in
+  const zoomIn = useCallback(() => {
+    setScale(prev => Math.min(3, prev + 0.1));
+  }, []);
+
+  // Zoom out
+  const zoomOut = useCallback(() => {
+    setScale(prev => Math.max(0.3, prev - 0.1));
+  }, []);
+
+  // Get cursor style based on tool and state
+  const getCursorStyle = useCallback(() => {
+    if (isPanning) return 'cursor-grabbing';
+    if (tool === 'select') return 'cursor-default';
+    if (tool === 'move') return 'cursor-grab';
+    return 'cursor-crosshair';
+  }, [isPanning, tool]);
 
   // Handle keyboard shortcuts for zoom, pan, and delete
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -49,21 +119,20 @@ export const useCanvasInteraction = ({ deleteElement }: UseCanvasInteractionProp
     // Escape to deselect
     if (e.key === 'Escape') {
       setSelectedElement(null);
+      setEditingElement(null);
     }
 
     // Zoom shortcuts
     if (e.ctrlKey || e.metaKey) {
       if (e.key === '=' || e.key === '+') {
         e.preventDefault();
-        setScale(prev => Math.min(3, prev + 0.1));
+        zoomIn();
       } else if (e.key === '-') {
         e.preventDefault();
-        setScale(prev => Math.max(0.3, prev - 0.1));
+        zoomOut();
       } else if (e.key === '0') {
         e.preventDefault();
-        setScale(1);
-        setPanX(0);
-        setPanY(0);
+        resetView();
       }
     }
 
@@ -95,7 +164,7 @@ export const useCanvasInteraction = ({ deleteElement }: UseCanvasInteractionProp
         }
       }
     }
-  }, [selectedElement, deleteElement]);
+  }, [selectedElement, setSelectedElement, setEditingElement, deleteElement, zoomIn, zoomOut, resetView]);
 
   // Register keyboard event listener
   useEffect(() => {
@@ -112,7 +181,7 @@ export const useCanvasInteraction = ({ deleteElement }: UseCanvasInteractionProp
       setSelectedElement(null);
     }
     // For other tools, the click will be handled in the parent component
-  }, []);
+  }, [setSelectedElement]);
 
   // Handle element click for selection
   const handleElementClick = useCallback((elementId: string, tool: string) => {
@@ -120,83 +189,37 @@ export const useCanvasInteraction = ({ deleteElement }: UseCanvasInteractionProp
       setSelectedElement(elementId);
     }
     // For other tools (like vote), the action will be handled by other hooks
-  }, []);
-
-  // Handle mouse down for panning
-  const handleMouseDown = useCallback((e: React.MouseEvent, tool: string) => {
-    // Pan with left click when move tool is selected
-    if (tool === 'move' && e.button === 0) {
-      e.preventDefault();
-      setIsPanning(true);
-      setPanStart({ x: e.clientX, y: e.clientY });
-      return;
-    }
-
-    // Middle mouse button for panning (always available)
-    if (e.button === 1) {
-      e.preventDefault();
-      setIsPanning(true);
-      setPanStart({ x: e.clientX, y: e.clientY });
-    }
-  }, []);
-
-  // Handle mouse move for panning
-  const handleMouseMoveForPanning = useCallback((e: React.MouseEvent) => {
-    if (isPanning) {
-      const deltaX = e.clientX - panStart.x;
-      const deltaY = e.clientY - panStart.y;
-
-      setPanX(prev => prev + deltaX);
-      setPanY(prev => prev + deltaY);
-
-      setPanStart({ x: e.clientX, y: e.clientY });
-    }
-  }, [isPanning, panStart]);
-
-  // Handle mouse up for ending panning
-  const handleMouseUp = useCallback(() => {
-    setIsPanning(false);
-  }, []);
-
-  // Zoom controls
-  const zoomIn = useCallback(() => {
-    setScale(prev => Math.min(3, prev + 0.1));
-  }, []);
-
-  const zoomOut = useCallback(() => {
-    setScale(prev => Math.max(0.3, prev - 0.1));
-  }, []);
-
-  const resetZoom = useCallback(() => {
-    setScale(1);
-    setPanX(0);
-    setPanY(0);
-  }, []);
+  }, [setSelectedElement]);
 
   return {
-    // State
+    // Viewport state
     scale,
     panX,
     panY,
-    selectedElement,
     isPanning,
+    panStart,
     
-    // Setters
-    setSelectedElement,
+    // Viewport state setters
+    setScale,
+    setPanX,
+    setPanY,
     setIsPanning,
     setPanStart,
     
-    // Event handlers
+    // Mouse event handlers
     handleWheel,
-    handleCanvasClick,
-    handleElementClick,
     handleMouseDown,
     handleMouseMoveForPanning,
-    handleMouseUp,
+    handleMouseUpForPanning,
     
-    // Zoom controls
+    // Click event handlers
+    handleCanvasClick,
+    handleElementClick,
+    
+    // Utility functions
+    resetView,
     zoomIn,
     zoomOut,
-    resetZoom,
+    getCursorStyle,
   };
 }; 

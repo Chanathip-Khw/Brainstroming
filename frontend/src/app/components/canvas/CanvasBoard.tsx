@@ -22,7 +22,7 @@ import { useElementCRUD } from '../../hooks/useElementCRUD';
 import { useElementVoting } from '../../hooks/useElementVoting';
 import { useElementDragging } from '../../hooks/useElementDragging';
 import { useElementResizing } from '../../hooks/useElementResizing';
-import { useCanvasPanZoom } from '../../hooks/useCanvasPanZoom';
+import { useCanvasInteraction } from '../../hooks/useCanvasInteraction';
 import { StickyNoteRenderer } from './StickyNoteRenderer';
 import { TextElementRenderer } from './TextElementRenderer';
 import { ShapeRenderer } from './ShapeRenderer';
@@ -240,7 +240,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     await deleteElementHook(elementId);
   };
 
-  // Canvas pan and zoom hook
+  // Canvas interaction hook (mouse, keyboard, viewport)
   const {
     scale,
     panX,
@@ -256,11 +256,13 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     handleMouseDown: handleMouseDownForPanning,
     handleMouseMoveForPanning,
     handleMouseUpForPanning,
+    handleCanvasClick: handleCanvasClickFromHook,
+    handleElementClick: handleElementClickFromHook,
     resetView,
     zoomIn,
     zoomOut,
     getCursorStyle,
-  } = useCanvasPanZoom({
+  } = useCanvasInteraction({
     tool,
     selectedElement,
     setSelectedElement,
@@ -410,10 +412,8 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
 
   const handleCanvasClick = (e: React.MouseEvent) => {
-    if (tool === 'select') {
-      setSelectedElement(null);
-      return;
-    }
+    // Use hook for basic interaction logic (selection/deselection)
+    handleCanvasClickFromHook(tool);
 
     if (tool === 'move') {
       // Pan tool doesn't create elements, just pans
@@ -456,9 +456,11 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   const handleElementClick = (elementId: string, e: React.MouseEvent) => {
     e.stopPropagation();
 
-    if (tool === 'select') {
-      setSelectedElement(elementId);
-    } else if (tool === 'vote') {
+    // Use hook for basic interaction logic (selection)
+    handleElementClickFromHook(elementId, tool);
+
+    // Handle voting separately as it's not part of basic interaction
+    if (tool === 'vote') {
       const element = elements.find(el => el.id === elementId);
       // Only allow voting on sticky notes
       if (element?.type === 'STICKY_NOTE') {
