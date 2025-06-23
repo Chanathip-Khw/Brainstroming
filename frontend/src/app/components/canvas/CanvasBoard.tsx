@@ -17,40 +17,15 @@ import { SessionTimer } from '../SessionTimer';
 import { SessionTemplates } from '../SessionTemplates';
 import { Clock, Users } from 'lucide-react';
 import { useCollaboration } from '../../hooks/useCollaboration';
+import { useElementData } from '../../hooks/useElementData';
+import { useElementCRUD } from '../../hooks/useElementCRUD';
+import { useElementVoting } from '../../hooks/useElementVoting';
+import { useElementDragging } from '../../hooks/useElementDragging';
+import { useElementResizing } from '../../hooks/useElementResizing';
+import { useCanvasPanZoom } from '../../hooks/useCanvasPanZoom';
 import LiveCursors from '../LiveCursors';
 import { fetchApi } from '../../lib/api';
-
-interface CanvasElement {
-  id: string;
-  type: 'STICKY_NOTE' | 'TEXT' | 'SHAPE' | 'GROUP';
-  positionX: number;
-  positionY: number;
-  width: number;
-  height: number;
-  content: string;
-  styleData: {
-    color: string;
-    shapeType?: string;
-    groupId?: string;
-    [key: string]: any;
-  };
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
-  _count?: {
-    votes: number;
-  };
-  votes?: {
-    id: string;
-    userId: string;
-    type: string;
-    user: {
-      id: string;
-      name: string;
-      avatarUrl: string;
-    };
-  }[];
-}
+import type { CanvasElement } from '../../hooks/useElementData';
 
 interface CanvasBoardProps {
   user: User;
@@ -63,30 +38,13 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   const sessionTimerRef = useRef<any>(null);
   const sessionTemplatesRef = useRef<any>(null);
   const [tool, setTool] = useState<string>('select');
-  const [elements, setElements] = useState<CanvasElement[]>([]);
   const [selectedColor, setSelectedColor] = useState('#fbbf24');
   const [isVoting, setIsVoting] = useState(false);
-  const [scale, setScale] = useState(1);
-  const [panX, setPanX] = useState(0);
-  const [panY, setPanY] = useState(0);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
   const [editingElement, setEditingElement] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
-  const [loading, setLoading] = useState(true);
   const [showHelp, setShowHelp] = useState(true);
   const [selectedShape, setSelectedShape] = useState('circle');
-  const [isResizing, setIsResizing] = useState(false);
-  const [resizeHandle, setResizeHandle] = useState<string | null>(null);
-  const [resizeStart, setResizeStart] = useState({
-    x: 0,
-    y: 0,
-    width: 0,
-    height: 0,
-  });
   const [timerNotification, setTimerNotification] = useState<string | null>(
     null
   );
@@ -203,6 +161,43 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     },
   });
 
+  // Canvas elements data hook
+  const {
+    elements,
+    setElements,
+    loading,
+    fetchElements: refetchElements,
+  } = useElementData({
+    projectId,
+  });
+
+  // Canvas elements CRUD operations hook
+  const {
+    createElement: createElementHook,
+    updateElement: updateElementHook,
+    deleteElement: deleteElementHook,
+  } = useElementCRUD({
+    projectId,
+    userId: user.id,
+    elements,
+    setElements,
+    collaboration,
+  });
+
+  // Canvas elements voting operations hook
+  const {
+    addVote: addVoteHook,
+    removeVote: removeVoteHook,
+    hasUserVoted: hasUserVotedHook,
+    handleElementVote: handleElementVoteHook,
+  } = useElementVoting({
+    projectId,
+    userId: user.id,
+    elements,
+    setElements,
+    collaboration,
+  });
+
   const colors = [
     '#fbbf24',
     '#3b82f6',
@@ -234,412 +229,62 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     { id: 'vote', icon: Vote, label: 'Vote' },
   ];
 
-  // Fetch elements from backend
-  const fetchElements = useCallback(async () => {
-    if (!projectId) return;
-
-    try {
-      const data = await fetchApi(`/api/projects/${projectId}/elements`);
-
-      if (data.success) {
-        console.log('Raw elements data from backend:', data.elements);
-        // Convert decimal positions to numbers
-        const processedElements = data.elements.map((element: any) => ({
-          ...element,
-          positionX:
-            typeof element.positionX === 'string'
-              ? parseFloat(element.positionX)
-              : Number(element.positionX),
-          positionY:
-            typeof element.positionY === 'string'
-              ? parseFloat(element.positionY)
-              : Number(element.positionY),
-          width:
-            typeof element.width === 'string'
-              ? parseFloat(element.width)
-              : Number(element.width),
-          height:
-            typeof element.height === 'string'
-              ? parseFloat(element.height)
-              : Number(element.height),
-        }));
-        setElements(processedElements);
-        console.log('Loaded elements with votes data:', processedElements);
-      } else {
-        console.error('Failed to fetch elements:', data.error);
-      }
-    } catch (error) {
-      console.error('Error fetching elements:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
-
-  // Create element with optimistic updates
-  const createElement = async (elementData: Partial<CanvasElement>) => {
-    if (!projectId) return;
-
-    // Generate temporary ID for optimistic update
-    const tempId = `temp-${Date.now()}-${Math.random()}`;
-
-    // Create optimistic element (show immediately)
-    const optimisticElement: CanvasElement = {
-      id: tempId,
-      type: elementData.type!,
-      positionX: elementData.positionX!,
-      positionY: elementData.positionY!,
-      width: elementData.width!,
-      height: elementData.height!,
-      content: elementData.content || '',
-      styleData: elementData.styleData!,
-      createdBy: user.id,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    // Add to UI immediately (optimistic update)
-    setElements(prev => [...prev, optimisticElement]);
-
-    try {
-      // Send to backend in background
-      const data = await fetchApi(`/api/projects/${projectId}/elements`, {
-        method: 'POST',
-        body: JSON.stringify({
-          type: elementData.type,
-          x: elementData.positionX,
-          y: elementData.positionY,
-          width: elementData.width,
-          height: elementData.height,
-          content: elementData.content,
-          color: elementData.styleData?.color,
-          style: elementData.styleData,
-        }),
-      });
-
-      if (data.success) {
-        // Replace optimistic element with real element from backend
-        const processedElement = {
-          ...data.element,
-          positionX:
-            typeof data.element.positionX === 'string'
-              ? parseFloat(data.element.positionX)
-              : Number(data.element.positionX),
-          positionY:
-            typeof data.element.positionY === 'string'
-              ? parseFloat(data.element.positionY)
-              : Number(data.element.positionY),
-          width:
-            typeof data.element.width === 'string'
-              ? parseFloat(data.element.width)
-              : Number(data.element.width),
-          height:
-            typeof data.element.height === 'string'
-              ? parseFloat(data.element.height)
-              : Number(data.element.height),
-        };
-
-        setElements(prev =>
-          prev.map(el => (el.id === tempId ? processedElement : el))
-        );
-
-        // Emit real-time event
-        collaboration.emitElementCreated(processedElement);
-      } else {
-        console.error('Failed to create element:', data.error);
-        // Remove optimistic element on failure
-        setElements(prev => prev.filter(el => el.id !== tempId));
-      }
-    } catch (error) {
-      console.error('Error creating element:', error);
-      // Remove optimistic element on error
-      setElements(prev => prev.filter(el => el.id !== tempId));
-    }
-  };
-
-  // Update element with optimistic updates
-  const updateElement = async (
-    elementId: string,
-    updateData: Partial<CanvasElement>
-  ) => {
-    if (!projectId) return;
-
-    // Store current state for potential rollback
-    const currentElement = elements.find(el => el.id === elementId);
-    if (!currentElement) return;
-
-    // Apply optimistic update immediately
-    setElements(prev =>
-      prev.map(el => (el.id === elementId ? { ...el, ...updateData } : el))
-    );
-
-    try {
-      const data = await fetchApi(
-        `/api/projects/${projectId}/elements/${elementId}`,
-        {
-          method: 'PUT',
-          body: JSON.stringify(updateData),
-        }
-      );
-
-      if (data.success) {
-        // Sync with backend response (in case backend modified the data)
-        const processedElement = {
-          ...data.element,
-          positionX:
-            typeof data.element.positionX === 'string'
-              ? parseFloat(data.element.positionX)
-              : Number(data.element.positionX),
-          positionY:
-            typeof data.element.positionY === 'string'
-              ? parseFloat(data.element.positionY)
-              : Number(data.element.positionY),
-          width:
-            typeof data.element.width === 'string'
-              ? parseFloat(data.element.width)
-              : Number(data.element.width),
-          height:
-            typeof data.element.height === 'string'
-              ? parseFloat(data.element.height)
-              : Number(data.element.height),
-        };
-        setElements(prev =>
-          prev.map(el =>
-            el.id === elementId ? { ...el, ...processedElement } : el
-          )
-        );
-
-        // Emit real-time event
-        collaboration.emitElementUpdated({
-          ...currentElement,
-          ...processedElement,
-        });
-      } else {
-        console.error('Failed to update element:', data.error);
-        // Rollback on failure
-        setElements(prev =>
-          prev.map(el => (el.id === elementId ? currentElement : el))
-        );
-      }
-    } catch (error) {
-      console.error('Error updating element:', error);
-      // Rollback on error
-      setElements(prev =>
-        prev.map(el => (el.id === elementId ? currentElement : el))
-      );
-    }
-  };
-
-  // Delete element with optimistic updates
+  // Wrapper for deleteElement that also clears selection
   const deleteElement = async (elementId: string) => {
-    if (!projectId) return;
-
-    // Store current element for potential restoration
-    const elementToDelete = elements.find(el => el.id === elementId);
-    if (!elementToDelete) return;
-
-    // Remove element immediately (optimistic delete)
-    setElements(prev => prev.filter(el => el.id !== elementId));
     setSelectedElement(null);
-
-    try {
-      const data = await fetchApi(
-        `/api/projects/${projectId}/elements/${elementId}`,
-        {
-          method: 'DELETE',
-        }
-      );
-
-      if (!data.success) {
-        console.error('Failed to delete element:', data.error);
-        // Restore element on failure
-        setElements(prev => [...prev, elementToDelete]);
-      } else {
-        // Emit real-time event
-        collaboration.emitElementDeleted(elementId);
-      }
-      // If successful, element is already removed from UI
-    } catch (error) {
-      console.error('Error deleting element:', error);
-      // Restore element on error
-      setElements(prev => [...prev, elementToDelete]);
-    }
+    await deleteElementHook(elementId);
   };
 
-  // Add vote to element
-  const addVote = async (elementId: string) => {
-    if (!projectId) return;
+  // Canvas pan and zoom hook
+  const {
+    scale,
+    panX,
+    panY,
+    isPanning,
+    panStart,
+    setScale,
+    setPanX,
+    setPanY,
+    setIsPanning,
+    setPanStart,
+    handleWheel: handleWheelHook,
+    handleMouseDown: handleMouseDownForPanning,
+    handleMouseMoveForPanning,
+    handleMouseUpForPanning,
+    resetView,
+    zoomIn,
+    zoomOut,
+    getCursorStyle,
+  } = useCanvasPanZoom({
+    tool,
+    selectedElement,
+    setSelectedElement,
+    setEditingElement,
+    deleteElement,
+  });
 
-    console.log('Attempting to add vote for element:', elementId);
-
-    try {
-      const data = await fetchApi(
-        `/api/projects/${projectId}/elements/${elementId}/votes`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ type: 'LIKE' }),
-        }
-      );
-      console.log('Add vote response:', data);
-
-      if (data.success) {
-        // Update local UI immediately for the voting user (optimistic update)
-        setElements(prev =>
-          prev.map(el => {
-            if (el.id === elementId) {
-              // Check if vote already exists to prevent duplicates
-              const existingVotes = el.votes || [];
-              const voteExists = existingVotes.some(
-                existingVote => existingVote.userId === data.vote.userId
-              );
-
-              if (voteExists) {
-                console.log(
-                  'Vote already exists locally, skipping optimistic update'
-                );
-                return el;
-              }
-
-              const updatedVotes = [...existingVotes, data.vote];
-              return {
-                ...el,
-                votes: updatedVotes,
-                _count: {
-                  ...el._count,
-                  votes: updatedVotes.length,
-                },
-              };
-            }
-            return el;
-          })
-        );
-        console.log('Vote added successfully');
-
-        // Emit real-time event (this will update other users' UI)
-        collaboration.emitVoteAdded(elementId, data.vote);
-      } else {
-        console.error('Failed to add vote:', data.error);
-        alert('Failed to add vote: ' + data.error);
-      }
-    } catch (error) {
-      console.error('Error adding vote:', error);
-      alert('Error adding vote: ' + error);
-    }
-  };
-
-  // Remove vote from element
-  const removeVote = async (elementId: string) => {
-    if (!projectId) return;
-
-    console.log('Attempting to remove vote for element:', elementId);
-
-    try {
-      const data = await fetchApi(
-        `/api/projects/${projectId}/elements/${elementId}/votes`,
-        {
-          method: 'DELETE',
-        }
-      );
-      console.log('Remove vote response:', data);
-
-      if (data.success) {
-        // Update local UI immediately for the voting user (optimistic update)
-        setElements(prev =>
-          prev.map(el => {
-            if (el.id === elementId) {
-              const updatedVotes = (el.votes || []).filter(
-                vote => vote.userId !== user.id
-              );
-              return {
-                ...el,
-                votes: updatedVotes,
-                _count: {
-                  ...el._count,
-                  votes: updatedVotes.length,
-                },
-              };
-            }
-            return el;
-          })
-        );
-        console.log('Vote removed successfully');
-
-        // Emit real-time event (this will update other users' UI)
-        collaboration.emitVoteRemoved(elementId);
-      } else {
-        console.error('Failed to remove vote:', data.error);
-        alert('Failed to remove vote: ' + data.error);
-      }
-    } catch (error) {
-      console.error('Error removing vote:', error);
-      alert('Error removing vote: ' + error);
-    }
-  };
-
-  // Check if user has voted on an element
-  const hasUserVoted = (element: CanvasElement) => {
-    console.log('Checking if user voted:', {
-      elementId: element.id,
-      userId: user.id,
-      userIdType: typeof user.id,
-      votes: element.votes,
-      voteUserIds: element.votes?.map(vote => ({
-        userId: vote.userId,
-        type: typeof vote.userId,
-      })),
-      hasVotes: element.votes?.some(vote => {
-        console.log(
-          'Comparing:',
-          vote.userId,
-          'vs',
-          user.id,
-          'equal:',
-          vote.userId === user.id
-        );
-        return vote.userId === user.id;
-      }),
-    });
-    return element.votes?.some(vote => vote.userId === user.id) || false;
-  };
-
-  // Handle voting on element (only sticky notes)
-  const handleElementVote = async (elementId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const element = elements.find(el => el.id === elementId);
-    if (!element || element.type !== 'STICKY_NOTE') return;
-
-    // First, let's check the current backend state for this element
-    try {
-      const voteData = await fetchApi(
-        `/api/projects/${projectId}/elements/${elementId}/votes`
-      );
-      console.log('Current backend vote state:', voteData);
-
-      if (voteData.success) {
-        // Check if user has voted based on backend data
-        const userHasVoted = voteData.userVoted;
-        console.log('Backend says user voted:', userHasVoted);
-
-        if (userHasVoted) {
-          await removeVote(elementId);
-        } else {
-          await addVote(elementId);
-        }
-      } else {
-        console.error('Failed to get vote state:', voteData.error);
-      }
-    } catch (error) {
-      console.error('Error checking vote state:', error);
-      // Fallback to frontend state
-      const userHasVoted = hasUserVoted(element);
-      console.log('Fallback - frontend thinks user voted:', userHasVoted);
-
-      if (userHasVoted) {
-        removeVote(elementId);
-      } else {
-        addVote(elementId);
-      }
-    }
-  };
+  // Element resizing hook
+  const {
+    isResizing,
+    resizeHandle,
+    resizeStart,
+    setIsResizing,
+    setResizeHandle,
+    setResizeStart,
+    handleResizeMouseDown: handleResizeMouseDownHook,
+    handleMouseMoveForResizing,
+    handleMouseUpForResizing,
+    getResizeHandles,
+  } = useElementResizing({
+    elements,
+    setElements,
+    selectedElement,
+    scale,
+    panX,
+    panY,
+    canvasRef,
+    updateElement: updateElementHook,
+  });
 
   // Get elements that belong to a specific group
   const getElementsInGroup = (groupId: string) => {
@@ -682,7 +327,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       groupId: groupId,
     };
 
-    await updateElement(elementId, { styleData: updatedStyleData });
+    await updateElementHook(elementId, { styleData: updatedStyleData });
   };
 
   // Remove element from group
@@ -691,7 +336,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     if (!element) return;
 
     const { groupId, ...restStyleData } = element.styleData;
-    await updateElement(elementId, { styleData: restStyleData });
+    await updateElementHook(elementId, { styleData: restStyleData });
   };
 
   // Handle timer completion
@@ -728,103 +373,36 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     // The SessionTimer will automatically start the first activity
   };
 
-  // Load elements on component mount
-  useEffect(() => {
-    fetchElements();
-  }, [fetchElements]);
+  // Elements are now automatically loaded by the useElementData hook
 
-  // Handle mouse wheel zoom
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
+  // Element dragging hook
+  const {
+    isDragging,
+    dragOffset,
+    isDragReady,
+    setIsDragging,
+    setDragOffset,
+    setIsDragReady,
+    handleElementMouseDown: handleElementMouseDownHook,
+    handleMouseMoveForDragging,
+    handleMouseUpForDragging,
+  } = useElementDragging({
+    elements,
+    setElements,
+    selectedElement,
+    scale,
+    panX,
+    panY,
+    canvasRef,
+    updateElement: updateElementHook,
+    addElementToGroup,
+    removeElementFromGroup,
+    findGroupAtPoint,
+  });
 
-    const zoomFactor = 0.1;
-    const delta = -e.deltaY;
 
-    setScale(prevScale => {
-      const newScale =
-        delta > 0
-          ? Math.min(3, prevScale + zoomFactor)
-          : Math.max(0.3, prevScale - zoomFactor);
-      return newScale;
-    });
-  };
 
-  // Handle keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Delete selected element when Delete or Backspace is pressed
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElement) {
-        // Don't trigger if user is typing in an input/textarea
-        if (
-          e.target instanceof HTMLInputElement ||
-          e.target instanceof HTMLTextAreaElement ||
-          (e.target as HTMLElement)?.isContentEditable
-        ) {
-          return;
-        }
 
-        e.preventDefault();
-        deleteElement(selectedElement);
-      }
-
-      // Escape to deselect
-      if (e.key === 'Escape') {
-        setSelectedElement(null);
-        setEditingElement(null);
-      }
-
-      // Zoom shortcuts
-      if (e.ctrlKey || e.metaKey) {
-        if (e.key === '=' || e.key === '+') {
-          e.preventDefault();
-          setScale(prev => Math.min(3, prev + 0.1));
-        } else if (e.key === '-') {
-          e.preventDefault();
-          setScale(prev => Math.max(0.3, prev - 0.1));
-        } else if (e.key === '0') {
-          e.preventDefault();
-          setScale(1);
-          setPanX(0);
-          setPanY(0);
-        }
-      }
-
-      // Pan with arrow keys
-      if (
-        e.key === 'ArrowUp' ||
-        e.key === 'ArrowDown' ||
-        e.key === 'ArrowLeft' ||
-        e.key === 'ArrowRight'
-      ) {
-        if (!selectedElement) {
-          // Only pan if no element is selected
-          e.preventDefault();
-          const panAmount = e.shiftKey ? 200 : 100; // Faster panning with Shift
-
-          switch (e.key) {
-            case 'ArrowUp':
-              setPanY(prev => prev + panAmount);
-              break;
-            case 'ArrowDown':
-              setPanY(prev => prev - panAmount);
-              break;
-            case 'ArrowLeft':
-              setPanX(prev => prev + panAmount);
-              break;
-            case 'ArrowRight':
-              setPanX(prev => prev - panAmount);
-              break;
-          }
-        }
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [selectedElement, deleteElement]);
 
   const handleCanvasClick = (e: React.MouseEvent) => {
     if (tool === 'select') {
@@ -863,7 +441,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
           },
         };
 
-        createElement(newElement);
+        createElementHook(newElement);
         // Automatically switch to select tool after placing an element
         setTool('select');
       }
@@ -879,7 +457,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       const element = elements.find(el => el.id === elementId);
       // Only allow voting on sticky notes
       if (element?.type === 'STICKY_NOTE') {
-        handleElementVote(elementId, e);
+        handleElementVoteHook(elementId, e);
       }
     }
   };
@@ -907,30 +485,13 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       setEditingText('');
 
       // Sync with backend in background
-      updateElement(editingElement, { content: editingText });
+      updateElementHook(editingElement, { content: editingText });
     }
   };
 
   const handleElementMouseDown = (elementId: string, e: React.MouseEvent) => {
-    if (tool !== 'select') return;
-
-    e.stopPropagation();
-    const element = elements.find(el => el.id === elementId);
-    if (!element) return;
-
     setSelectedElement(elementId);
-    setIsDragging(true);
-
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (rect) {
-      const x = (e.clientX - rect.left - panX) / scale;
-      const y = (e.clientY - rect.top - panY) / scale;
-
-      setDragOffset({
-        x: x - element.positionX,
-        y: y - element.positionY,
-      });
-    }
+    handleElementMouseDownHook(elementId, e, tool);
   };
 
   const handleResizeMouseDown = (
@@ -938,28 +499,8 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     handle: string,
     e: React.MouseEvent
   ) => {
-    if (tool !== 'select') return;
-
-    e.stopPropagation();
-    const element = elements.find(el => el.id === elementId);
-    if (!element) return;
-
     setSelectedElement(elementId);
-    setIsResizing(true);
-    setResizeHandle(handle);
-
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (rect) {
-      const x = (e.clientX - rect.left - panX) / scale;
-      const y = (e.clientY - rect.top - panY) / scale;
-
-      setResizeStart({
-        x,
-        y,
-        width: element.width,
-        height: element.height,
-      });
-    }
+    handleResizeMouseDownHook(elementId, handle, e, tool);
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -972,228 +513,27 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     }
 
     // Handle element resizing
-    if (isResizing && selectedElement && resizeHandle) {
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (rect) {
-        const currentX = (e.clientX - rect.left - panX) / scale;
-        const currentY = (e.clientY - rect.top - panY) / scale;
+    handleMouseMoveForResizing(e, isPanning, isDragging);
 
-        const deltaX = currentX - resizeStart.x;
-        const deltaY = currentY - resizeStart.y;
-
-        let newWidth = resizeStart.width;
-        let newHeight = resizeStart.height;
-        let newX: number | undefined;
-        let newY: number | undefined;
-
-        const element = elements.find(el => el.id === selectedElement);
-        if (!element) return;
-
-        // Calculate the fixed anchor point based on resize handle
-        // Elements are centered, so we need to calculate the absolute corners first
-        const currentLeft = element.positionX - element.width / 2;
-        const currentRight = element.positionX + element.width / 2;
-        const currentTop = element.positionY - element.height / 2;
-        const currentBottom = element.positionY + element.height / 2;
-
-        let fixedLeft = currentLeft;
-        let fixedRight = currentRight;
-        let fixedTop = currentTop;
-        let fixedBottom = currentBottom;
-
-        // Determine which edges are fixed based on the resize handle
-        switch (resizeHandle) {
-          case 'se': // Southeast: fix NW corner (top-left)
-            fixedLeft = currentLeft;
-            fixedTop = currentTop;
-            newWidth = Math.max(50, currentX - fixedLeft);
-            newHeight = Math.max(30, currentY - fixedTop);
-            break;
-          case 'sw': // Southwest: fix NE corner (top-right)
-            fixedRight = currentRight;
-            fixedTop = currentTop;
-            newWidth = Math.max(50, fixedRight - currentX);
-            newHeight = Math.max(30, currentY - fixedTop);
-            break;
-          case 'ne': // Northeast: fix SW corner (bottom-left)
-            fixedLeft = currentLeft;
-            fixedBottom = currentBottom;
-            newWidth = Math.max(50, currentX - fixedLeft);
-            newHeight = Math.max(30, fixedBottom - currentY);
-            break;
-          case 'nw': // Northwest: fix SE corner (bottom-right)
-            fixedRight = currentRight;
-            fixedBottom = currentBottom;
-            newWidth = Math.max(50, fixedRight - currentX);
-            newHeight = Math.max(30, fixedBottom - currentY);
-            break;
-          case 'e': // East: fix left edge
-            fixedLeft = currentLeft;
-            newWidth = Math.max(50, currentX - fixedLeft);
-            newHeight = element.height; // Keep height unchanged
-            break;
-          case 'w': // West: fix right edge
-            fixedRight = currentRight;
-            newWidth = Math.max(50, fixedRight - currentX);
-            newHeight = element.height; // Keep height unchanged
-            break;
-          case 'n': // North: fix bottom edge
-            fixedBottom = currentBottom;
-            newWidth = element.width; // Keep width unchanged
-            newHeight = Math.max(30, fixedBottom - currentY);
-            break;
-          case 's': // South: fix top edge
-            fixedTop = currentTop;
-            newWidth = element.width; // Keep width unchanged
-            newHeight = Math.max(30, currentY - fixedTop);
-            break;
-        }
-
-        // Calculate new center position based on fixed edges and new dimensions
-        switch (resizeHandle) {
-          case 'se': // Fixed top-left corner
-            newX = fixedLeft + newWidth / 2;
-            newY = fixedTop + newHeight / 2;
-            break;
-          case 'sw': // Fixed top-right corner
-            newX = fixedRight - newWidth / 2;
-            newY = fixedTop + newHeight / 2;
-            break;
-          case 'ne': // Fixed bottom-left corner
-            newX = fixedLeft + newWidth / 2;
-            newY = fixedBottom - newHeight / 2;
-            break;
-          case 'nw': // Fixed bottom-right corner
-            newX = fixedRight - newWidth / 2;
-            newY = fixedBottom - newHeight / 2;
-            break;
-          case 'e': // Fixed left edge
-            newX = fixedLeft + newWidth / 2;
-            newY = element.positionY; // Keep Y unchanged
-            break;
-          case 'w': // Fixed right edge
-            newX = fixedRight - newWidth / 2;
-            newY = element.positionY; // Keep Y unchanged
-            break;
-          case 'n': // Fixed bottom edge
-            newX = element.positionX; // Keep X unchanged
-            newY = fixedBottom - newHeight / 2;
-            break;
-          case 's': // Fixed top edge
-            newX = element.positionX; // Keep X unchanged
-            newY = fixedTop + newHeight / 2;
-            break;
-        }
-
-        setElements(prev =>
-          prev.map(el =>
-            el.id === selectedElement
-              ? {
-                  ...el,
-                  width: newWidth,
-                  height: newHeight,
-                  ...(newX !== undefined && { positionX: newX }),
-                  ...(newY !== undefined && { positionY: newY }),
-                }
-              : el
-          )
-        );
-      }
-    }
     // Handle element dragging
-    else if (isDragging && selectedElement && !isPanning && !isResizing) {
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (rect) {
-        const x = (e.clientX - rect.left - panX) / scale - dragOffset.x;
-        const y = (e.clientY - rect.top - panY) / scale - dragOffset.y;
-
-        setElements(prev =>
-          prev.map(el =>
-            el.id === selectedElement
-              ? { ...el, positionX: x, positionY: y }
-              : el
-          )
-        );
-      }
-    }
+    handleMouseMoveForDragging(e, isPanning, isResizing);
 
     // Handle canvas panning
-    if (isPanning) {
-      const deltaX = e.clientX - panStart.x;
-      const deltaY = e.clientY - panStart.y;
-
-      setPanX(prev => prev + deltaX);
-      setPanY(prev => prev + deltaY);
-
-      setPanStart({ x: e.clientX, y: e.clientY });
-    }
+    handleMouseMoveForPanning(e);
   };
 
-  const handleMouseUp = (e?: React.MouseEvent) => {
-    if (isResizing && selectedElement) {
-      const element = elements.find(el => el.id === selectedElement);
-      if (element) {
-        updateElement(selectedElement, {
-          width: element.width,
-          height: element.height,
-          positionX: element.positionX,
-          positionY: element.positionY,
-        });
-      }
-    } else if (isDragging && selectedElement) {
-      const element = elements.find(el => el.id === selectedElement);
-      if (element && element.type === 'STICKY_NOTE') {
-        // Check if sticky note was dropped into a group
-        const targetGroup = findGroupAtPoint(
-          element.positionX,
-          element.positionY
-        );
-
-        if (targetGroup && targetGroup.id !== element.styleData?.groupId) {
-          // Add to new group
-          console.log('Adding sticky note to group:', targetGroup.id);
-          addElementToGroup(selectedElement, targetGroup.id);
-        } else if (!targetGroup && element.styleData?.groupId) {
-          // Remove from current group if dropped outside any group
-          console.log('Removing sticky note from group');
-          removeElementFromGroup(selectedElement);
-        }
-
-        // Update backend with final position
-        updateElement(selectedElement, {
-          positionX: element.positionX,
-          positionY: element.positionY,
-        });
-      } else if (element) {
-        // Update backend with final position for non-sticky elements
-        updateElement(selectedElement, {
-          positionX: element.positionX,
-          positionY: element.positionY,
-        });
-      }
-    }
-    setIsDragging(false);
-    setIsPanning(false);
-    setIsResizing(false);
-    setResizeHandle(null);
+  const handleMouseUp = async (e?: React.MouseEvent) => {
+    // Handle element resizing end
+    handleMouseUpForResizing();
+    
+    // Handle element dragging end
+    handleMouseUpForDragging();
+    
+    // Handle panning end
+    handleMouseUpForPanning();
   };
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    // Pan with left click when move tool is selected
-    if (tool === 'move' && e.button === 0) {
-      e.preventDefault();
-      setIsPanning(true);
-      setPanStart({ x: e.clientX, y: e.clientY });
-      return;
-    }
 
-    // Middle mouse button for panning (always available)
-    if (e.button === 1) {
-      e.preventDefault();
-      setIsPanning(true);
-      setPanStart({ x: e.clientX, y: e.clientY });
-    }
-  };
 
   const getElementColor = (element: CanvasElement) => {
     const color = element.styleData?.color || '#fbbf24';
@@ -1305,64 +645,15 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
   // Render resize handles for selected element
   const renderResizeHandles = (element: CanvasElement) => {
-    if (selectedElement !== element.id) return null;
-
-    // All elements get the same 8 resize handles
-    const handles = [
-      { id: 'nw', style: { top: '-4px', left: '-4px', cursor: 'nw-resize' } },
-      {
-        id: 'n',
-        style: {
-          top: '-4px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          cursor: 'n-resize',
-        },
-      },
-      { id: 'ne', style: { top: '-4px', right: '-4px', cursor: 'ne-resize' } },
-      {
-        id: 'e',
-        style: {
-          top: '50%',
-          right: '-4px',
-          transform: 'translateY(-50%)',
-          cursor: 'e-resize',
-        },
-      },
-      {
-        id: 'se',
-        style: { bottom: '-4px', right: '-4px', cursor: 'se-resize' },
-      },
-      {
-        id: 's',
-        style: {
-          bottom: '-4px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          cursor: 's-resize',
-        },
-      },
-      {
-        id: 'sw',
-        style: { bottom: '-4px', left: '-4px', cursor: 'sw-resize' },
-      },
-      {
-        id: 'w',
-        style: {
-          top: '50%',
-          left: '-4px',
-          transform: 'translateY(-50%)',
-          cursor: 'w-resize',
-        },
-      },
-    ];
+    const handles = getResizeHandles(element);
+    if (handles.length === 0) return null;
 
     return handles.map(handle => (
       <div
         key={handle.id}
         className='absolute w-2 h-2 bg-indigo-500 border border-white rounded-sm hover:bg-indigo-600 transition-colors'
         style={handle.style}
-        onMouseDown={e => handleResizeMouseDown(element.id, handle.id, e)}
+        onMouseDown={handle.onMouseDown}
       />
     ));
   };
@@ -1642,7 +933,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                             <button
                               key={color}
                               onClick={() =>
-                                updateElement(selectedElement, {
+                                updateElementHook(selectedElement, {
                                   styleData: { ...element.styleData, color },
                                 })
                               }
@@ -1698,20 +989,12 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       <div className='flex-1 relative overflow-hidden'>
         <div
           ref={canvasRef}
-          className={`w-full h-full relative ${
-            isPanning
-              ? 'cursor-grabbing'
-              : tool === 'select'
-                ? 'cursor-default'
-                : tool === 'move'
-                  ? 'cursor-grab'
-                  : 'cursor-crosshair'
-          }`}
+          className={`w-full h-full relative ${getCursorStyle()}`}
           onClick={handleCanvasClick}
-          onMouseDown={handleMouseDown}
+          onMouseDown={handleMouseDownForPanning}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
-          onWheel={handleWheel}
+          onWheel={handleWheelHook}
           onContextMenu={e => e.preventDefault()} // Prevent right-click menu
           style={{
             transform: `scale(${scale}) translate(${panX}px, ${panY}px)`,
@@ -1874,7 +1157,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                     {tool === 'vote' && element.type === 'STICKY_NOTE' && (
                       <div
                         className={`absolute -top-1 -left-1 w-3 h-3 rounded-full z-10 ${
-                          hasUserVoted(element) ? 'bg-green-500' : 'bg-blue-500'
+                          hasUserVotedHook(element) ? 'bg-green-500' : 'bg-blue-500'
                         } opacity-70`}
                       />
                     )}
@@ -1917,21 +1200,21 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
         <div className='absolute bottom-4 right-4 bg-white rounded-lg shadow-lg p-2 flex items-center gap-2'>
           <button
-            onClick={() => setScale(Math.max(0.3, scale - 0.1))}
+            onClick={zoomOut}
             className='p-2 hover:bg-gray-100 rounded text-lg font-bold'
             title='Zoom out (Ctrl + -)'
           >
             -
           </button>
           <button
-            onClick={() => setScale(1)}
+            onClick={resetView}
             className='text-sm font-medium w-16 text-center hover:bg-gray-100 rounded px-2 py-1'
             title='Reset zoom (Ctrl + 0)'
           >
             {Math.round(scale * 100)}%
           </button>
           <button
-            onClick={() => setScale(Math.min(3, scale + 0.1))}
+            onClick={zoomIn}
             className='p-2 hover:bg-gray-100 rounded text-lg font-bold'
             title='Zoom in (Ctrl + +)'
           >
