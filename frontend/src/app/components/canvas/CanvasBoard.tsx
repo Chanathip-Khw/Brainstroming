@@ -369,7 +369,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   }
 
   return (
-    <div className='flex flex-1'>
+    <div className='flex flex-1 h-full'>
       {/* Timer and Templates modals */}
       <SessionTimer
         onTimerComplete={handleTimerComplete}
@@ -399,50 +399,52 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
         </div>
       )}
 
-      <div className='bg-white border-r border-gray-200 p-4 w-64 flex flex-col gap-4'>
-        <ToolPanel
-          tools={CANVAS_TOOLS}
-          selectedTool={tool}
-          onToolSelect={setTool}
-        />
+      <div className='bg-white border-r border-gray-200 w-64 flex flex-col h-full'>
+        <div className='flex-1 overflow-y-auto p-4 flex flex-col gap-4'>
+          <ToolPanel
+            tools={CANVAS_TOOLS}
+            selectedTool={tool}
+            onToolSelect={setTool}
+          />
 
-        <ColorPicker
-          colors={CANVAS_COLORS}
-          selectedColor={selectedColor}
-          onColorSelect={setSelectedColor}
-          title='Colors'
-        />
+          <ColorPicker
+            colors={CANVAS_COLORS}
+            selectedColor={selectedColor}
+            onColorSelect={setSelectedColor}
+            title='Colors'
+          />
 
-        <SessionControls
-          currentTemplate={currentTemplate}
-          onOpenTemplates={() => setShowTemplatesModal(true)}
-          onOpenTimer={() => setShowTimerModal(true)}
-        />
+          <SessionControls
+            currentTemplate={currentTemplate}
+            onOpenTemplates={() => setShowTemplatesModal(true)}
+            onOpenTimer={() => setShowTimerModal(true)}
+          />
 
-        <ShapeSelector
-          shapes={CANVAS_SHAPES}
-          selectedShape={selectedShape}
-          onShapeSelect={setSelectedShape}
-          isVisible={tool === 'SHAPE'}
-        />
+          <ShapeSelector
+            shapes={CANVAS_SHAPES}
+            selectedShape={selectedShape}
+            onShapeSelect={setSelectedShape}
+            isVisible={tool === 'SHAPE'}
+          />
 
-        <ElementPropertiesPanel
-          selectedElement={selectedElement}
-          elements={elements}
-          colors={CANVAS_COLORS}
-          onEditElement={(elementId, content) => {
-            setEditingElement(elementId);
-            setEditingText(content);
-          }}
-          onDeleteElement={deleteElement}
-          onUpdateElement={updateElementHook}
-          getElementsInGroup={(groupId: string) =>
-            getElementsInGroup(elements, groupId)
-          }
-          getGroupVoteCount={(groupId: string) =>
-            getGroupVoteCount(elements, groupId)
-          }
-        />
+          <ElementPropertiesPanel
+            selectedElement={selectedElement}
+            elements={elements}
+            colors={CANVAS_COLORS}
+            onEditElement={(elementId, content) => {
+              setEditingElement(elementId);
+              setEditingText(content);
+            }}
+            onDeleteElement={deleteElement}
+            onUpdateElement={updateElementHook}
+            getElementsInGroup={(groupId: string) =>
+              getElementsInGroup(elements, groupId)
+            }
+            getGroupVoteCount={(groupId: string) =>
+              getGroupVoteCount(elements, groupId)
+            }
+          />
+        </div>
       </div>
 
       <div className='flex-1 relative overflow-hidden'>

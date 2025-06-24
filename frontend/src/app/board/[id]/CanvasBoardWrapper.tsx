@@ -16,5 +16,9 @@ const CanvasBoard = dynamic(
 );
 
 export const CanvasBoardWrapper: React.FC<CanvasBoardWrapperProps> = ({ user, projectId }) => {
-  return <CanvasBoard user={user} projectId={projectId} />;
+  return (
+    <div className="flex-1 min-h-0">
+      <CanvasBoard user={user} projectId={projectId} />
+    </div>
+  );
 }; 
