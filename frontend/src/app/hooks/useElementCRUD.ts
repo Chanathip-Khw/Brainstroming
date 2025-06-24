@@ -113,6 +113,11 @@ export const useElementCRUD = ({
     async (elementId: string, updateData: Partial<CanvasElement>) => {
       if (!projectId) return;
 
+      // 🔧 VOTING BUG FIX: This function now preserves local vote state during position updates.
+      // Previously, cache invalidation after dragging would immediately refetch server data,
+      // overwriting local optimistic vote updates. Now we rely on real-time collaboration 
+      // events to sync data across users instead of aggressive cache invalidation.
+
       // Store current state for potential rollback
       const currentElement = elements.find(el => el.id === elementId);
       if (!currentElement) return;
@@ -142,10 +147,12 @@ export const useElementCRUD = ({
           // The optimistic update is already applied and working correctly
           collaboration.emitElementUpdated(data.element);
           
-          // 🔄 CRITICAL FIX: Invalidate React Query cache so refresh shows correct data
-          queryClient.invalidateQueries({ 
-            queryKey: ['projectElements', projectId] 
-          });
+          // 🔧 VOTING BUG FIX: Don't immediately invalidate cache after position updates
+          // This was causing fresh server data to overwrite local vote state during dragging
+          // The cache will be updated naturally through real-time collaboration events
+          // queryClient.invalidateQueries({ 
+          //   queryKey: ['projectElements', projectId] 
+          // });
         } else {
           console.error('❌ Failed to update element:', data.error);
           console.error('📊 Full error response:', data);

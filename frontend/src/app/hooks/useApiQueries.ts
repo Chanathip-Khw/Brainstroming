@@ -115,7 +115,8 @@ export const useProjectElementsQuery = (projectId: string) => {
       throw new Error(data.error || 'Failed to fetch elements');
     },
     enabled: !!projectId,
-    staleTime: 10 * 1000, // 10 seconds (real-time data)
+    staleTime: 5 * 60 * 1000, // 🔧 FIX: Increased to 5 minutes to prevent aggressive refetching that interferes with voting
+    refetchOnWindowFocus: false, // 🔧 FIX: Prevent refetch on window focus that can interfere with interaction
   });
 };
 

@@ -38,6 +38,14 @@ interface UseElementDataProps {
 }
 
 export const useElementData = ({ projectId }: UseElementDataProps) => {
+  // 🔧 VOTING BUG FIX: This hook now properly preserves local vote state when React Query
+  // refetches data in the background. Previously, aggressive background refetching (every 10s)
+  // would overwrite optimistic vote updates, causing votes to appear "unvoted" in the frontend
+  // while the backend remained correct. The fix involves:
+  // 1. Increased stale time to 5 minutes to reduce aggressive refetching
+  // 2. Smart merging of server updates while preserving local vote state
+  // 3. Disabled refetch on window focus to prevent interruption during interactions
+  
   // Use React Query for data fetching with caching and background updates
   const { data: elements = [], isLoading: loading, refetch: fetchElements } = useProjectElementsQuery(projectId);
   
@@ -58,8 +66,29 @@ export const useElementData = ({ projectId }: UseElementDataProps) => {
       }
       setLocalElements(elements);
       setIsInitialized(true);
-    } else if (isInitialized) {
-      console.log('⏸️ Skipping React Query sync - local state already initialized');
+    } else if (isInitialized && elements.length > 0) {
+      // 🔧 FIX: Merge React Query updates while preserving local vote state
+      console.log('🔄 Merging React Query updates while preserving local state');
+      setLocalElements(prevLocal => {
+        return prevLocal.map(localEl => {
+          const serverEl = elements.find((el: CanvasElement) => el.id === localEl.id);
+          if (serverEl) {
+            // Preserve local vote state if it exists, otherwise use server state
+            const preservedVotes = localEl.votes && localEl.votes.length > 0 ? localEl.votes : serverEl.votes;
+            const preservedCount = localEl._count?.votes !== undefined ? localEl._count : serverEl._count;
+            
+            return {
+              ...serverEl, // Use server data for position, content, etc.
+              votes: preservedVotes, // 🔧 FIX: Preserve local vote state
+              _count: preservedCount, // 🔧 FIX: Preserve local vote counts
+            };
+          }
+          return localEl; // Keep local element if not found on server
+        }).concat(
+          // Add any new elements from server that don't exist locally
+          elements.filter((serverEl: CanvasElement) => !prevLocal.some(localEl => localEl.id === serverEl.id))
+        );
+      });
     }
   }, [elements, isInitialized]);
 

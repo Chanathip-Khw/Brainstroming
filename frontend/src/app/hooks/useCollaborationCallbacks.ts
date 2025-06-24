@@ -26,7 +26,21 @@ export const useCollaborationCallbacks = ({ setElements }: UseCollaborationCallb
     console.log('🌐 Collaboration: Element updated received', element.id, `pos: ${element.positionX},${element.positionY}`);
     const processedElement = processElementData(element);
     setElements(prev => {
-      const result = prev.map(el => (el.id === element.id ? processedElement : el));
+      // 🔧 VOTING BUG FIX: Preserve local vote state when receiving position updates
+      const result = prev.map(el => {
+        if (el.id === element.id) {
+          // Preserve local vote state if it exists, otherwise use server state
+          const preservedVotes = el.votes && el.votes.length > 0 ? el.votes : processedElement.votes;
+          const preservedCount = el._count?.votes !== undefined ? el._count : processedElement._count;
+          
+          return {
+            ...processedElement, // Use updated data for position, content, etc.
+            votes: preservedVotes, // 🔧 FIX: Preserve local vote state
+            _count: preservedCount, // 🔧 FIX: Preserve local vote counts
+          } as CanvasElement;
+        }
+        return el;
+      });
       console.log('🌐 Collaboration: Applied element update', processedElement.id, `new pos: ${processedElement.positionX},${processedElement.positionY}`);
       return result;
     });
