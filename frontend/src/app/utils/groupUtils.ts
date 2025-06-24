@@ -8,7 +8,7 @@ export const getElementsInGroup = (
   groupId: string
 ): CanvasElement[] => {
   const groupElements = elements.filter(el => el.styleData?.groupId === groupId);
-  console.log(`📊 Group ${groupId} has ${groupElements.length} items:`, groupElements.map(el => el.id));
+  // console.log(`📊 Group ${groupId} has ${groupElements.length} items:`, groupElements.map(el => el.id));
   return groupElements;
 };
 
@@ -23,10 +23,10 @@ export const getGroupVoteCount = (
   const stickyNotes = groupElements.filter(el => el.type === 'STICKY_NOTE');
   const totalVotes = stickyNotes.reduce((total, stickyNote) => {
     const votes = stickyNote._count?.votes || 0;
-    console.log(`🗳️ Sticky note ${stickyNote.id} has ${votes} votes`);
+    // console.log(`🗳️ Sticky note ${stickyNote.id} has ${votes} votes`);
     return total + votes;
   }, 0);
-  console.log(`🗳️ Group ${groupId} total votes: ${totalVotes}`);
+  // console.log(`🗳️ Group ${groupId} total votes: ${totalVotes}`);
   return totalVotes;
 };
 

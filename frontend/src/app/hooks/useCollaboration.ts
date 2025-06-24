@@ -179,7 +179,8 @@ export const useCollaboration = ({
 
     socket.on('project_users', (users: ProjectUser[]) => {
       console.log('Current project users:', users);
-      setProjectUsers(users.filter(u => u.userId !== session.user?.id));
+      // Include all users including current user for proper status tracking
+      setProjectUsers(users);
     });
 
     // Handle cursor movements

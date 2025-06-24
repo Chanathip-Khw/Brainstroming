@@ -40,11 +40,13 @@ export default function BoardPage({
     isInCollaboration: collaboration.projectUsers.some(
       user => user.userId === member.id
     ),
+    isCurrentUser: member.id === session?.user?.id,
   }));
 
   // Debug logging for member status changes
   useEffect(() => {
     console.log('Member status update:', {
+      currentUserId: session?.user?.id,
       collaborationUsers: collaboration.projectUsers.map(u => ({
         id: u.userId,
         name: u.name,
@@ -54,9 +56,10 @@ export default function BoardPage({
         id: m.id,
         name: m.name,
         isInCollaboration: m.isInCollaboration,
+        isCurrentUser: m.isCurrentUser,
       })),
     });
-  }, [collaboration.projectUsers, workspaceMembers.length]);
+  }, [collaboration.projectUsers, workspaceMembers.length, session?.user?.id]);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -106,30 +109,32 @@ export default function BoardPage({
 
   // Helper function to determine if a member is considered active
   const isMemberActive = (member: any) => {
-    // console.log('Checking member active status:', {
-    //   memberId: member.id,
-    //   memberName: member.name,
-    //   isInCollaboration: member.isInCollaboration,
-    //   isInCollaborationType: typeof member.isInCollaboration,
-    // });
+    console.log('Checking member active status:', {
+      memberId: member.id,
+      memberName: member.name,
+      isInCollaboration: member.isInCollaboration,
+      isInCollaborationType: typeof member.isInCollaboration,
+    });
 
     // Real-time collaboration status takes absolute priority
     // If they're in collaboration, they're definitely active
-    // if (member.isInCollaboration) {
-    //   console.log(`Member ${member.name} is ACTIVE (in collaboration)`);
-    //   return true;
-    // }
+    if (member.isInCollaboration) {
+      console.log(`Member ${member.name} is ACTIVE (in collaboration)`);
+      return true;
+    }
 
     // If they're NOT in collaboration, they're considered inactive
     // (This ensures real-time accuracy over session-based fallbacks)
-    // if (member.isInCollaboration === false) {
-    //   console.log(`Member ${member.name} is INACTIVE (not in collaboration)`);
-    //   return false;
-    // }
+    if (member.isInCollaboration === false) {
+      console.log(`Member ${member.name} is INACTIVE (not in collaboration)`);
+      return false;
+    }
 
     // Fallback logic only applies if collaboration status is undefined
     // (for cases where collaboration data hasn't loaded yet)
     if (member.isInCollaboration === undefined) {
+      console.log(`Member ${member.name} - collaboration status undefined, using fallback logic`);
+      
       // Fallback to session-based logic
       if (!member.isActive) return false;
 
@@ -141,14 +146,19 @@ export default function BoardPage({
           return sessionUpdateTime > twoHoursAgo;
         });
 
-        if (hasRecentActivity) return true;
+        if (hasRecentActivity) {
+          console.log(`Member ${member.name} is ACTIVE (recent session activity)`);
+          return true;
+        }
       }
 
       // Final fallback: check last login time
       const lastLoginTime = new Date(member.lastLogin).getTime();
       const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
 
-      return lastLoginTime > twentyFourHoursAgo;
+      const isRecentLogin = lastLoginTime > twentyFourHoursAgo;
+      console.log(`Member ${member.name} - last login check: ${isRecentLogin ? 'ACTIVE' : 'INACTIVE'}`);
+      return isRecentLogin;
     }
 
     return false;
