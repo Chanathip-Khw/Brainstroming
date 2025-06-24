@@ -42,6 +42,9 @@ import {
   removeGroupStyleData,
 } from '../../utils/groupUtils';
 import { screenToCanvas } from '../../utils/canvasUtils';
+import { useCollaborationCallbacks } from '../../hooks/useCollaborationCallbacks';
+import { createNewElement } from '../../utils/elementCreation';
+import { CREATABLE_ELEMENT_TYPES } from '../../constants/elements';
 
 interface CanvasBoardProps {
   user: User;
@@ -72,114 +75,18 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     setShowTemplatesModal,
   } = useSessionManagement();
 
-  // Real-time collaboration
-  const collaboration = useCollaboration({
-    projectId,
-    onElementCreated: element => {
-      const processedElement = {
-        ...element,
-        positionX:
-          typeof element.positionX === 'string'
-            ? parseFloat(element.positionX)
-            : Number(element.positionX),
-        positionY:
-          typeof element.positionY === 'string'
-            ? parseFloat(element.positionY)
-            : Number(element.positionY),
-        width:
-          typeof element.width === 'string'
-            ? parseFloat(element.width)
-            : Number(element.width),
-        height:
-          typeof element.height === 'string'
-            ? parseFloat(element.height)
-            : Number(element.height),
-      };
-      setElements(prev => [...prev, processedElement]);
-    },
-    onElementUpdated: element => {
-      const processedElement = {
-        ...element,
-        positionX:
-          typeof element.positionX === 'string'
-            ? parseFloat(element.positionX)
-            : Number(element.positionX),
-        positionY:
-          typeof element.positionY === 'string'
-            ? parseFloat(element.positionY)
-            : Number(element.positionY),
-        width:
-          typeof element.width === 'string'
-            ? parseFloat(element.width)
-            : Number(element.width),
-        height:
-          typeof element.height === 'string'
-            ? parseFloat(element.height)
-            : Number(element.height),
-      };
-      setElements(prev =>
-        prev.map(el => (el.id === element.id ? processedElement : el))
-      );
-    },
-    onElementDeleted: elementId => {
-      setElements(prev => prev.filter(el => el.id !== elementId));
-    },
-    onVoteAdded: (elementId, vote) => {
-      setElements(prev =>
-        prev.map(el => {
-          if (el.id === elementId) {
-            // Check if vote already exists to prevent duplicates
-            const existingVotes = el.votes || [];
-            const voteExists = existingVotes.some(
-              existingVote =>
-                existingVote.userId === vote.userId &&
-                existingVote.id === vote.id
-            );
-
-            if (voteExists) {
-              console.log('Vote already exists, skipping duplicate:', vote);
-              return el; // No change if vote already exists
-            }
-
-            const updatedVotes = [...existingVotes, vote];
-            return {
-              ...el,
-              votes: updatedVotes,
-              _count: {
-                ...el._count,
-                votes: updatedVotes.length,
-              },
-            };
-          }
-          return el;
-        })
-      );
-    },
-    onVoteRemoved: (elementId, userId) => {
-      setElements(prev =>
-        prev.map(el => {
-          if (el.id === elementId) {
-            const updatedVotes = (el.votes || []).filter(
-              vote => vote.userId !== userId
-            );
-            return {
-              ...el,
-              votes: updatedVotes,
-              _count: {
-                ...el._count,
-                votes: updatedVotes.length,
-              },
-            };
-          }
-          return el;
-        })
-      );
-    },
-  });
-
   // Canvas elements data hook
   const { elements, setElements, loading } = useElementData({
     projectId,
+  });
+
+  // Collaboration callbacks
+  const collaborationCallbacks = useCollaborationCallbacks({ setElements });
+
+  // Real-time collaboration
+  const collaboration = useCollaboration({
+    projectId,
+    ...collaborationCallbacks,
   });
 
   // Canvas elements CRUD operations hook
@@ -303,7 +210,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       return;
     }
 
-    if (['STICKY_NOTE', 'TEXT', 'SHAPE', 'GROUP'].includes(tool)) {
+    if (CREATABLE_ELEMENT_TYPES.includes(tool as any)) {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect) {
         const { x, y } = screenToCanvas(
@@ -315,25 +222,13 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
           panY
         );
 
-        const newElement: Partial<CanvasElement> = {
-          type: tool as 'STICKY_NOTE' | 'TEXT' | 'SHAPE' | 'GROUP',
-          positionX: x,
-          positionY: y,
-          width: tool === 'TEXT' ? 200 : tool === 'GROUP' ? 300 : 150,
-          height: tool === 'TEXT' ? 30 : tool === 'GROUP' ? 200 : 150,
-          content:
-            tool === 'GROUP'
-              ? 'Group Label'
-              : tool === 'STICKY_NOTE'
-                ? ''
-                : tool === 'TEXT'
-                  ? ''
-                  : '',
-          styleData: {
-            color: selectedColor,
-            ...(tool === 'SHAPE' && { shapeType: selectedShape }),
-          },
-        };
+        const newElement = createNewElement(
+          tool as any,
+          x,
+          y,
+          selectedColor,
+          selectedShape
+        );
 
         createElementHook(newElement);
         // Automatically switch to select tool after placing an element
