@@ -49,4 +49,4 @@ export const SessionControls: React.FC<SessionControlsProps> = ({
       </div>
     </div>
   );
-}; 
+};

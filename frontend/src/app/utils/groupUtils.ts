@@ -3,14 +3,20 @@ import type { CanvasElement } from '../hooks/useElementData';
 /**
  * Get elements that belong to a specific group
  */
-export const getElementsInGroup = (elements: CanvasElement[], groupId: string): CanvasElement[] => {
+export const getElementsInGroup = (
+  elements: CanvasElement[],
+  groupId: string
+): CanvasElement[] => {
   return elements.filter(el => el.styleData?.groupId === groupId);
 };
 
 /**
  * Get total vote count for all sticky notes in a group
  */
-export const getGroupVoteCount = (elements: CanvasElement[], groupId: string): number => {
+export const getGroupVoteCount = (
+  elements: CanvasElement[],
+  groupId: string
+): number => {
   const groupElements = getElementsInGroup(elements, groupId);
   const stickyNotes = groupElements.filter(el => el.type === 'STICKY_NOTE');
   return stickyNotes.reduce((total, stickyNote) => {
@@ -21,28 +27,37 @@ export const getGroupVoteCount = (elements: CanvasElement[], groupId: string): n
 /**
  * Check if a point is inside a group boundary
  */
-export const isPointInGroup = (x: number, y: number, group: CanvasElement): boolean => {
+export const isPointInGroup = (
+  x: number,
+  y: number,
+  group: CanvasElement
+): boolean => {
   const groupLeft = group.positionX - group.width / 2;
   const groupRight = group.positionX + group.width / 2;
   const groupTop = group.positionY - group.height / 2;
   const groupBottom = group.positionY + group.height / 2;
 
-  return (
-    x >= groupLeft && x <= groupRight && y >= groupTop && y <= groupBottom
-  );
+  return x >= groupLeft && x <= groupRight && y >= groupTop && y <= groupBottom;
 };
 
 /**
  * Find which group contains a point (if any)
  */
-export const findGroupAtPoint = (elements: CanvasElement[], x: number, y: number): CanvasElement | undefined => {
+export const findGroupAtPoint = (
+  elements: CanvasElement[],
+  x: number,
+  y: number
+): CanvasElement | undefined => {
   return elements.find(el => el.type === 'GROUP' && isPointInGroup(x, y, el));
 };
 
 /**
  * Add element to group by updating its styleData
  */
-export const createGroupStyleData = (element: CanvasElement, groupId: string) => {
+export const createGroupStyleData = (
+  element: CanvasElement,
+  groupId: string
+) => {
   return {
     ...element.styleData,
     groupId: groupId,
@@ -56,7 +71,7 @@ export const removeGroupStyleData = (element: CanvasElement) => {
   if (!element.styleData) {
     return { color: '#fbbf24' }; // Return default color if no styleData
   }
-  
+
   const { groupId, ...restStyleData } = element.styleData;
   return restStyleData;
 };
@@ -78,6 +93,8 @@ export const getGroups = (elements: CanvasElement[]): CanvasElement[] => {
 /**
  * Get all elements that are not in any group
  */
-export const getUngroupedElements = (elements: CanvasElement[]): CanvasElement[] => {
+export const getUngroupedElements = (
+  elements: CanvasElement[]
+): CanvasElement[] => {
   return elements.filter(el => el.type !== 'GROUP' && !isElementInGroup(el));
-}; 
+};

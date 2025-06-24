@@ -27,7 +27,7 @@ interface UseSessionManagementReturn {
   timerNotification: string | null;
   showTimerModal: boolean;
   showTemplatesModal: boolean;
-  
+
   // Actions
   handleTimerComplete: (activityName: string) => void;
   handleStartTemplate: (template: SessionTemplate) => void;
@@ -41,41 +41,49 @@ export const useSessionManagement = ({
   onTimerComplete,
 }: UseSessionManagementProps = {}): UseSessionManagementReturn => {
   // Session state
-  const [currentTemplate, setCurrentTemplate] = useState<SessionTemplate | null>(null);
+  const [currentTemplate, setCurrentTemplate] =
+    useState<SessionTemplate | null>(null);
   const [currentActivityIndex, setCurrentActivityIndex] = useState(0);
-  const [templateSessionId, setTemplateSessionId] = useState<string | null>(null);
-  const [timerNotification, setTimerNotification] = useState<string | null>(null);
+  const [templateSessionId, setTemplateSessionId] = useState<string | null>(
+    null
+  );
+  const [timerNotification, setTimerNotification] = useState<string | null>(
+    null
+  );
   const [showTimerModal, setShowTimerModal] = useState(false);
   const [showTemplatesModal, setShowTemplatesModal] = useState(false);
 
   // Handle timer completion
-  const handleTimerComplete = useCallback((activityName: string) => {
-    setTimerNotification(activityName);
+  const handleTimerComplete = useCallback(
+    (activityName: string) => {
+      setTimerNotification(activityName);
 
-    // Call external handler if provided
-    if (onTimerComplete) {
-      onTimerComplete(activityName);
-    }
+      // Call external handler if provided
+      if (onTimerComplete) {
+        onTimerComplete(activityName);
+      }
 
-    // If running a template, advance to next activity
-    if (
-      currentTemplate &&
-      currentActivityIndex < currentTemplate.activities.length - 1
-    ) {
-      setTimeout(() => {
-        setCurrentActivityIndex(prev => prev + 1);
-        setTimerNotification(null);
-      }, 3000);
-    } else {
-      // Template completed or single timer
-      setTimeout(() => {
-        setTimerNotification(null);
-        setCurrentTemplate(null);
-        setCurrentActivityIndex(0);
-        setTemplateSessionId(null);
-      }, 5000);
-    }
-  }, [currentTemplate, currentActivityIndex, onTimerComplete]);
+      // If running a template, advance to next activity
+      if (
+        currentTemplate &&
+        currentActivityIndex < currentTemplate.activities.length - 1
+      ) {
+        setTimeout(() => {
+          setCurrentActivityIndex(prev => prev + 1);
+          setTimerNotification(null);
+        }, 3000);
+      } else {
+        // Template completed or single timer
+        setTimeout(() => {
+          setTimerNotification(null);
+          setCurrentTemplate(null);
+          setCurrentActivityIndex(0);
+          setTemplateSessionId(null);
+        }, 5000);
+      }
+    },
+    [currentTemplate, currentActivityIndex, onTimerComplete]
+  );
 
   // Handle starting a session template
   const handleStartTemplate = useCallback((template: SessionTemplate) => {
@@ -108,7 +116,7 @@ export const useSessionManagement = ({
     timerNotification,
     showTimerModal,
     showTemplatesModal,
-    
+
     // Actions
     handleTimerComplete,
     handleStartTemplate,
@@ -117,4 +125,4 @@ export const useSessionManagement = ({
     setShowTemplatesModal,
     clearTimerNotification,
   };
-}; 
+};

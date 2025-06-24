@@ -51,4 +51,4 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
       </div>
     </div>
   );
-}; 
+};

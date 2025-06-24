@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { CanvasElement } from './useElementData';
+import { screenToCanvas } from '../utils/canvasUtils';
 
 interface UseElementDraggingProps {
   elements: CanvasElement[];
@@ -9,7 +10,10 @@ interface UseElementDraggingProps {
   panX: number;
   panY: number;
   canvasRef: React.RefObject<HTMLDivElement | null>;
-  updateElement: (elementId: string, updateData: Partial<CanvasElement>) => Promise<void>;
+  updateElement: (
+    elementId: string,
+    updateData: Partial<CanvasElement>
+  ) => Promise<void>;
   addElementToGroup: (elementId: string, groupId: string) => Promise<void>;
   removeElementFromGroup: (elementId: string) => Promise<void>;
   findGroupAtPoint: (x: number, y: number) => CanvasElement | undefined;
@@ -34,60 +38,91 @@ export const useElementDragging = ({
   const [isDragReady, setIsDragReady] = useState(false);
 
   // Handle element mouse down for dragging
-  const handleElementMouseDown = useCallback((elementId: string, e: React.MouseEvent, tool: string) => {
-    if (tool !== 'select') return;
+  const handleElementMouseDown = useCallback(
+    (elementId: string, e: React.MouseEvent, tool: string) => {
+      if (tool !== 'select') return;
 
-    e.stopPropagation();
-    const element = elements.find(el => el.id === elementId);
-    if (!element) return;
+      e.stopPropagation();
+      const element = elements.find(el => el.id === elementId);
+      if (!element) return;
 
-    // Don't start dragging immediately, just prepare for potential drag
-    setIsDragReady(true);
-    setDragStartPos({ x: e.clientX, y: e.clientY });
+      // Don't start dragging immediately, just prepare for potential drag
+      setIsDragReady(true);
+      setDragStartPos({ x: e.clientX, y: e.clientY });
 
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (rect) {
-      const x = (e.clientX - rect.left - panX) / scale;
-      const y = (e.clientY - rect.top - panY) / scale;
-
-      setDragOffset({
-        x: x - element.positionX,
-        y: y - element.positionY,
-      });
-    }
-  }, [elements, canvasRef, panX, panY, scale]);
-
-  // Handle mouse move for dragging
-  const handleMouseMoveForDragging = useCallback((e: React.MouseEvent, isPanning: boolean, isResizing: boolean) => {
-    // Check if we should start dragging (user moved mouse while holding down)
-    if (isDragReady && selectedElement && !isPanning && !isResizing) {
-      const moveThreshold = 5; // pixels
-      const deltaX = Math.abs(e.clientX - dragStartPos.x);
-      const deltaY = Math.abs(e.clientY - dragStartPos.y);
-      
-      if (deltaX > moveThreshold || deltaY > moveThreshold) {
-        setIsDragging(true);
-        setIsDragReady(false);
-      }
-    }
-
-    // Handle element dragging
-    if (isDragging && selectedElement && !isPanning && !isResizing) {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect) {
-        const x = (e.clientX - rect.left - panX) / scale - dragOffset.x;
-        const y = (e.clientY - rect.top - panY) / scale - dragOffset.y;
-
-        setElements(prev =>
-          prev.map(el =>
-            el.id === selectedElement
-              ? { ...el, positionX: x, positionY: y }
-              : el
-          )
+        const { x, y } = screenToCanvas(
+          e.clientX,
+          e.clientY,
+          rect,
+          scale,
+          panX,
+          panY
         );
+
+        setDragOffset({
+          x: x - element.positionX,
+          y: y - element.positionY,
+        });
       }
-    }
-  }, [isDragging, isDragReady, selectedElement, canvasRef, panX, panY, scale, dragOffset, dragStartPos, setElements]);
+    },
+    [elements, canvasRef, panX, panY, scale]
+  );
+
+  // Handle mouse move for dragging
+  const handleMouseMoveForDragging = useCallback(
+    (e: React.MouseEvent, isPanning: boolean, isResizing: boolean) => {
+      // Check if we should start dragging (user moved mouse while holding down)
+      if (isDragReady && selectedElement && !isPanning && !isResizing) {
+        const moveThreshold = 5; // pixels
+        const deltaX = Math.abs(e.clientX - dragStartPos.x);
+        const deltaY = Math.abs(e.clientY - dragStartPos.y);
+
+        if (deltaX > moveThreshold || deltaY > moveThreshold) {
+          setIsDragging(true);
+          setIsDragReady(false);
+        }
+      }
+
+      // Handle element dragging
+      if (isDragging && selectedElement && !isPanning && !isResizing) {
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (rect) {
+          const { x: mouseX, y: mouseY } = screenToCanvas(
+            e.clientX,
+            e.clientY,
+            rect,
+            scale,
+            panX,
+            panY
+          );
+          const x = mouseX - dragOffset.x;
+          const y = mouseY - dragOffset.y;
+
+          setElements(prev =>
+            prev.map(el =>
+              el.id === selectedElement
+                ? { ...el, positionX: x, positionY: y }
+                : el
+            )
+          );
+        }
+      }
+    },
+    [
+      isDragging,
+      isDragReady,
+      selectedElement,
+      canvasRef,
+      panX,
+      panY,
+      scale,
+      dragOffset,
+      dragStartPos,
+      setElements,
+    ]
+  );
 
   // Handle mouse up for ending drag
   const handleMouseUpForDragging = useCallback(() => {
@@ -111,7 +146,10 @@ export const useElementDragging = ({
                 element.positionY
               );
 
-              if (targetGroup && targetGroup.id !== element.styleData?.groupId) {
+              if (
+                targetGroup &&
+                targetGroup.id !== element.styleData?.groupId
+              ) {
                 // Add to new group
                 console.log('Adding sticky note to group:', targetGroup.id);
                 await addElementToGroup(draggedElementId, targetGroup.id);
@@ -133,22 +171,30 @@ export const useElementDragging = ({
         })();
       }
     }
-  }, [isDragging, selectedElement, elements, findGroupAtPoint, addElementToGroup, removeElementFromGroup, updateElement]);
+  }, [
+    isDragging,
+    selectedElement,
+    elements,
+    findGroupAtPoint,
+    addElementToGroup,
+    removeElementFromGroup,
+    updateElement,
+  ]);
 
   return {
     // State
     isDragging,
     dragOffset,
     isDragReady,
-    
+
     // Setters
     setIsDragging,
     setDragOffset,
     setIsDragReady,
-    
+
     // Event handlers
     handleElementMouseDown,
     handleMouseMoveForDragging,
     handleMouseUpForDragging,
   };
-}; 
+};

@@ -42,4 +42,4 @@ export const CANVAS_TOOLS = [
   { id: 'GROUP', label: 'Group', icon: Group },
   { id: 'move', label: 'Pan', icon: Hand },
   { id: 'vote', label: 'Vote', icon: Vote },
-]; 
+];

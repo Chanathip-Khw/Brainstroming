@@ -38,4 +38,4 @@ export const ZoomControls: React.FC<ZoomControlsProps> = ({
       </button>
     </div>
   );
-}; 
+};

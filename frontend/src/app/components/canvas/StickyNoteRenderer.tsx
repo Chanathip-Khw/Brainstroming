@@ -100,4 +100,4 @@ const StickyNoteRendererComponent: React.FC<StickyNoteRendererProps> = ({
   );
 };
 
-export const StickyNoteRenderer = React.memo(StickyNoteRendererComponent); 
+export const StickyNoteRenderer = React.memo(StickyNoteRendererComponent);

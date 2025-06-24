@@ -39,4 +39,4 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
       </div>
     </div>
   );
-}; 
+};

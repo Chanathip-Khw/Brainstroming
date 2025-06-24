@@ -43,7 +43,9 @@ export const GroupRenderer: React.FC<GroupRendererProps> = ({
   return (
     <div
       className={`absolute cursor-pointer select-none border-2 border-dashed ${groupColors.border} ${groupColors.bg} ${
-        isSelected ? `${groupColors.selectedBorder} ${groupColors.selectedBg}` : ''
+        isSelected
+          ? `${groupColors.selectedBorder} ${groupColors.selectedBg}`
+          : ''
       }`}
       style={{
         left: `${element.positionX}px`,
@@ -103,4 +105,4 @@ export const GroupRenderer: React.FC<GroupRendererProps> = ({
       {renderResizeHandles(element)}
     </div>
   );
-}; 
+};

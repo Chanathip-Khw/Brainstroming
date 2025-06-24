@@ -224,7 +224,7 @@ export const SessionTimer: React.FC<SessionTimerProps> = ({
     if (selectedActivity?.id.startsWith('template-') && onStopSession) {
       onStopSession();
     }
-    
+
     setIsRunning(false);
     setIsPaused(false);
     setSelectedActivity(null);

@@ -95,4 +95,4 @@ export const useElementData = ({ projectId }: UseElementDataProps) => {
   };
 };
 
-export type { CanvasElement }; 
+export type { CanvasElement };

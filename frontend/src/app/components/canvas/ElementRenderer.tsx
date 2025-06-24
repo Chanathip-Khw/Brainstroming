@@ -78,4 +78,4 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
       {renderResizeHandles(element)}
     </div>
   );
-}; 
+};

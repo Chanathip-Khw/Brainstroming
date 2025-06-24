@@ -40,4 +40,4 @@ export const ShapeSelector: React.FC<ShapeSelectorProps> = ({
       </div>
     </div>
   );
-}; 
+};

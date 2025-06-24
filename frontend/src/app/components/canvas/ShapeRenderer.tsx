@@ -147,4 +147,4 @@ export const ShapeRenderer: React.FC<ShapeRendererProps> = ({
       {renderResizeHandles(element)}
     </div>
   );
-}; 
+};

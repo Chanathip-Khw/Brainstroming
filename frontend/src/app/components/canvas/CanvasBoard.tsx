@@ -1,15 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { useSession } from 'next-auth/react';
-import {
-  Hand,
-  Square,
-  Type,
-  Circle,
-  Minus,
-  Move,
-  Vote,
-  Group,
-} from 'lucide-react';
+import React, { useRef, useState } from 'react';
 import { User } from '../../types';
 import { SessionTimer } from '../SessionTimer';
 import { SessionTemplates } from '../SessionTemplates';
@@ -34,17 +23,23 @@ import { SessionControls } from './SessionControls';
 import { ShapeSelector } from './ShapeSelector';
 import { ElementPropertiesPanel } from './ElementPropertiesPanel';
 import LiveCursors from '../LiveCursors';
-import { fetchApi } from '../../lib/api';
 import type { CanvasElement } from '../../hooks/useElementData';
-import { CANVAS_COLORS, CANVAS_SHAPES, CANVAS_TOOLS } from '../../constants/canvas';
-import { getElementColor, getPlaceholderColor, getGroupColor } from '../../utils/elementStyles';
-import { 
-  getElementsInGroup, 
-  getGroupVoteCount, 
-  isPointInGroup, 
+import {
+  CANVAS_COLORS,
+  CANVAS_SHAPES,
+  CANVAS_TOOLS,
+} from '../../constants/canvas';
+import {
+  getElementColor,
+  getPlaceholderColor,
+  getGroupColor,
+} from '../../utils/elementStyles';
+import {
+  getElementsInGroup,
+  getGroupVoteCount,
   findGroupAtPoint,
   createGroupStyleData,
-  removeGroupStyleData
+  removeGroupStyleData,
 } from '../../utils/groupUtils';
 import { screenToCanvas } from '../../utils/canvasUtils';
 
@@ -54,13 +49,9 @@ interface CanvasBoardProps {
 }
 
 export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
-  const { data: session } = useSession();
   const canvasRef = useRef<HTMLDivElement>(null);
-  const sessionTimerRef = useRef<any>(null);
-  const sessionTemplatesRef = useRef<any>(null);
   const [tool, setTool] = useState<string>('select');
   const [selectedColor, setSelectedColor] = useState('#fbbf24');
-  const [isVoting, setIsVoting] = useState(false);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
   const [editingElement, setEditingElement] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
@@ -187,12 +178,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   });
 
   // Canvas elements data hook
-  const {
-    elements,
-    setElements,
-    loading,
-    fetchElements: refetchElements,
-  } = useElementData({
+  const { elements, setElements, loading } = useElementData({
     projectId,
   });
 
@@ -211,8 +197,6 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
   // Canvas elements voting operations hook
   const {
-    addVote: addVoteHook,
-    removeVote: removeVoteHook,
     hasUserVoted: hasUserVotedHook,
     handleElementVote: handleElementVoteHook,
   } = useElementVoting({
@@ -222,11 +206,6 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     setElements,
     collaboration,
   });
-
-  // Import constants
-  const colors = CANVAS_COLORS;
-  const shapes = CANVAS_SHAPES;
-  const tools = CANVAS_TOOLS;
 
   // Wrapper for deleteElement that also clears selection
   const deleteElement = async (elementId: string) => {
@@ -240,12 +219,6 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     panX,
     panY,
     isPanning,
-    panStart,
-    setScale,
-    setPanX,
-    setPanY,
-    setIsPanning,
-    setPanStart,
     handleWheel: handleWheelHook,
     handleMouseDown: handleMouseDownForPanning,
     handleMouseMoveForPanning,
@@ -267,11 +240,6 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   // Element resizing hook
   const {
     isResizing,
-    resizeHandle,
-    resizeStart,
-    setIsResizing,
-    setResizeHandle,
-    setResizeStart,
     handleResizeMouseDown: handleResizeMouseDownHook,
     handleMouseMoveForResizing,
     handleMouseUpForResizing,
@@ -305,18 +273,9 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     await updateElementHook(elementId, { styleData: updatedStyleData });
   };
 
-
-
-  // Elements are now automatically loaded by the useElementData hook
-
   // Element dragging hook
   const {
     isDragging,
-    dragOffset,
-    isDragReady,
-    setIsDragging,
-    setDragOffset,
-    setIsDragReady,
     handleElementMouseDown: handleElementMouseDownHook,
     handleMouseMoveForDragging,
     handleMouseUpForDragging,
@@ -331,12 +290,9 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     updateElement: updateElementHook,
     addElementToGroup,
     removeElementFromGroup,
-    findGroupAtPoint: (x: number, y: number) => findGroupAtPoint(elements, x, y),
+    findGroupAtPoint: (x: number, y: number) =>
+      findGroupAtPoint(elements, x, y),
   });
-
-
-
-
 
   const handleCanvasClick = (e: React.MouseEvent) => {
     // Use hook for basic interaction logic (selection/deselection)
@@ -350,8 +306,14 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     if (['STICKY_NOTE', 'TEXT', 'SHAPE', 'GROUP'].includes(tool)) {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect) {
-        const x = (e.clientX - rect.left - panX) / scale;
-        const y = (e.clientY - rect.top - panY) / scale;
+        const { x, y } = screenToCanvas(
+          e.clientX,
+          e.clientY,
+          rect,
+          scale,
+          panX,
+          panY
+        );
 
         const newElement: Partial<CanvasElement> = {
           type: tool as 'STICKY_NOTE' | 'TEXT' | 'SHAPE' | 'GROUP',
@@ -459,105 +421,12 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   const handleMouseUp = async (e?: React.MouseEvent) => {
     // Handle element resizing end
     handleMouseUpForResizing();
-    
+
     // Handle element dragging end
     handleMouseUpForDragging();
-    
+
     // Handle panning end
     handleMouseUpForPanning();
-  };
-
-
-
-
-  // Helper function to create placeholder color with opacity
-  const getPlaceholderColor = (element: CanvasElement) => {
-    const color = element.styleData?.color || '#fbbf24';
-    return color + '80'; // Add 50% opacity (80 in hex)
-  };
-
-  // Helper function to get group color classes
-  const getGroupColor = (element: CanvasElement) => {
-    if (element.type !== 'GROUP') {
-      return {
-        border: 'border-gray-400',
-        bg: 'bg-gray-50 bg-opacity-30',
-        selectedBorder: 'border-indigo-500',
-        selectedBg: 'bg-indigo-50',
-        label: 'bg-gray-200 text-gray-700',
-      };
-    }
-
-    const color = element.styleData?.color || '#6b7280';
-
-    const colorMap: { [key: string]: any } = {
-      '#fbbf24': {
-        // yellow
-        border: 'border-yellow-400',
-        bg: 'bg-yellow-50 bg-opacity-40',
-        selectedBorder: 'border-yellow-600',
-        selectedBg: 'bg-yellow-100',
-        label: 'bg-yellow-200 text-yellow-800',
-      },
-      '#3b82f6': {
-        // blue
-        border: 'border-blue-400',
-        bg: 'bg-blue-50 bg-opacity-40',
-        selectedBorder: 'border-blue-600',
-        selectedBg: 'bg-blue-100',
-        label: 'bg-blue-200 text-blue-800',
-      },
-      '#10b981': {
-        // green
-        border: 'border-green-400',
-        bg: 'bg-green-50 bg-opacity-40',
-        selectedBorder: 'border-green-600',
-        selectedBg: 'bg-green-100',
-        label: 'bg-green-200 text-green-800',
-      },
-      '#ec4899': {
-        // pink
-        border: 'border-pink-400',
-        bg: 'bg-pink-50 bg-opacity-40',
-        selectedBorder: 'border-pink-600',
-        selectedBg: 'bg-pink-100',
-        label: 'bg-pink-200 text-pink-800',
-      },
-      '#8b5cf6': {
-        // purple
-        border: 'border-purple-400',
-        bg: 'bg-purple-50 bg-opacity-40',
-        selectedBorder: 'border-purple-600',
-        selectedBg: 'bg-purple-100',
-        label: 'bg-purple-200 text-purple-800',
-      },
-      '#f97316': {
-        // orange
-        border: 'border-orange-400',
-        bg: 'bg-orange-50 bg-opacity-40',
-        selectedBorder: 'border-orange-600',
-        selectedBg: 'bg-orange-100',
-        label: 'bg-orange-200 text-orange-800',
-      },
-      '#ef4444': {
-        // red
-        border: 'border-red-400',
-        bg: 'bg-red-50 bg-opacity-40',
-        selectedBorder: 'border-red-600',
-        selectedBg: 'bg-red-100',
-        label: 'bg-red-200 text-red-800',
-      },
-      '#6b7280': {
-        // gray (default)
-        border: 'border-gray-400',
-        bg: 'bg-gray-50 bg-opacity-30',
-        selectedBorder: 'border-indigo-500',
-        selectedBg: 'bg-indigo-50',
-        label: 'bg-gray-200 text-gray-700',
-      },
-    };
-
-    return colorMap[color] || colorMap['#6b7280'];
   };
 
   // Render resize handles for selected element
@@ -574,8 +443,6 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
       />
     ));
   };
-
-
 
   if (loading) {
     return (
@@ -618,16 +485,16 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
       <div className='bg-white border-r border-gray-200 p-4 w-64 flex flex-col gap-4'>
         <ToolPanel
-          tools={tools}
+          tools={CANVAS_TOOLS}
           selectedTool={tool}
           onToolSelect={setTool}
         />
 
         <ColorPicker
-          colors={colors}
+          colors={CANVAS_COLORS}
           selectedColor={selectedColor}
           onColorSelect={setSelectedColor}
-          title="Colors"
+          title='Colors'
         />
 
         <SessionControls
@@ -637,7 +504,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
         />
 
         <ShapeSelector
-          shapes={shapes}
+          shapes={CANVAS_SHAPES}
           selectedShape={selectedShape}
           onShapeSelect={setSelectedShape}
           isVisible={tool === 'SHAPE'}
@@ -646,15 +513,19 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
         <ElementPropertiesPanel
           selectedElement={selectedElement}
           elements={elements}
-          colors={colors}
+          colors={CANVAS_COLORS}
           onEditElement={(elementId, content) => {
             setEditingElement(elementId);
             setEditingText(content);
           }}
           onDeleteElement={deleteElement}
           onUpdateElement={updateElementHook}
-          getElementsInGroup={(groupId: string) => getElementsInGroup(elements, groupId)}
-          getGroupVoteCount={(groupId: string) => getGroupVoteCount(elements, groupId)}
+          getElementsInGroup={(groupId: string) =>
+            getElementsInGroup(elements, groupId)
+          }
+          getGroupVoteCount={(groupId: string) =>
+            getGroupVoteCount(elements, groupId)
+          }
         />
       </div>
 
@@ -688,22 +559,19 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
             }}
           />
 
-          {useMemo(() => {
-            // Memoize element sorting to prevent re-computation on every render
-            const sortedElements = elements
-              .sort((a, b) => {
-                // Groups should render first (behind other elements)
-                if (a.type === 'GROUP' && b.type !== 'GROUP') return -1;
-                if (b.type === 'GROUP' && a.type !== 'GROUP') return 1;
-                return 0;
-              });
-
-            return sortedElements.map(element => {
+          {elements
+            .sort((a, b) => {
+              // Groups should render first (behind other elements)
+              if (a.type === 'GROUP' && b.type !== 'GROUP') return -1;
+              if (b.type === 'GROUP' && a.type !== 'GROUP') return 1;
+              return 0;
+            })
+            .map(element => {
               // Handle sticky notes with dedicated component
               if (element.type === 'STICKY_NOTE') {
                 return (
                   <StickyNoteRenderer
-                key={element.id}
+                    key={element.id}
                     element={element}
                     isSelected={selectedElement === element.id}
                     isEditing={editingElement === element.id}
@@ -751,8 +619,12 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                     isSelected={selectedElement === element.id}
                     isEditing={editingElement === element.id}
                     editingText={editingText}
-                    getElementsInGroup={(groupId: string) => getElementsInGroup(elements, groupId)}
-                    getGroupVoteCount={(groupId: string) => getGroupVoteCount(elements, groupId)}
+                    getElementsInGroup={(groupId: string) =>
+                      getElementsInGroup(elements, groupId)
+                    }
+                    getGroupVoteCount={(groupId: string) =>
+                      getGroupVoteCount(elements, groupId)
+                    }
                     getGroupColor={getGroupColor}
                     renderResizeHandles={renderResizeHandles}
                     onElementClick={handleElementClick}
@@ -798,7 +670,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                 />
               );
             })}
-                        </div>
+        </div>
 
         <ZoomControls
           scale={scale}
@@ -807,10 +679,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
           onResetView={resetView}
         />
 
-        <HelpTooltip
-          showHelp={showHelp}
-          onToggleHelp={setShowHelp}
-        />
+        <HelpTooltip showHelp={showHelp} onToggleHelp={setShowHelp} />
 
         {/* Live Cursors */}
         <LiveCursors cursors={collaboration.userCursors} />

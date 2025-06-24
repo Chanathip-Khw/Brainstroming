@@ -113,4 +113,4 @@ export const getGroupColor = (element: CanvasElement) => {
   };
 
   return colorMap[color] || colorMap['#6b7280'];
-}; 
+};

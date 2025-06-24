@@ -9,7 +9,10 @@ interface ElementPropertiesPanelProps {
   colors: string[];
   onEditElement: (elementId: string, content: string) => void;
   onDeleteElement: (elementId: string) => void;
-  onUpdateElement: (elementId: string, updateData: Partial<CanvasElement>) => void;
+  onUpdateElement: (
+    elementId: string,
+    updateData: Partial<CanvasElement>
+  ) => void;
   getElementsInGroup: (groupId: string) => CanvasElement[];
   getGroupVoteCount: (groupId: string) => number;
 }
@@ -42,13 +45,13 @@ export const ElementPropertiesPanel: React.FC<ElementPropertiesPanelProps> = ({
       <div className='space-y-3'>
         {hasEditableText && (
           <button
-            onClick={() => onEditElement(selectedElement, element.content || '')}
+            onClick={() =>
+              onEditElement(selectedElement, element.content || '')
+            }
             className='w-full p-2.5 text-left text-sm bg-gray-50 hover:bg-gray-100 rounded-lg flex items-center gap-2 transition-colors border border-gray-200'
           >
             <Edit3 className='w-4 h-4 text-gray-500' />
-            <span>
-              {element.type === 'GROUP' ? 'Edit Label' : 'Edit Text'}
-            </span>
+            <span>{element.type === 'GROUP' ? 'Edit Label' : 'Edit Text'}</span>
           </button>
         )}
 
@@ -56,21 +59,19 @@ export const ElementPropertiesPanel: React.FC<ElementPropertiesPanelProps> = ({
           <ColorPicker
             colors={colors}
             selectedColor={element.styleData?.color || '#6b7280'}
-            onColorSelect={(color) =>
+            onColorSelect={color =>
               onUpdateElement(selectedElement, {
                 styleData: { ...element.styleData, color },
               })
             }
-            title="Group Color"
-            size="small"
+            title='Group Color'
+            size='small'
           />
         )}
 
         {element.type === 'GROUP' && (
           <div className='p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm'>
-            <div className='font-medium text-blue-800 mb-2'>
-              Group Info
-            </div>
+            <div className='font-medium text-blue-800 mb-2'>Group Info</div>
             <div className='text-blue-600 space-y-1.5'>
               <div className='flex items-center justify-between'>
                 <span>Items:</span>
@@ -103,4 +104,4 @@ export const ElementPropertiesPanel: React.FC<ElementPropertiesPanelProps> = ({
       </div>
     </div>
   );
-}; 
+};

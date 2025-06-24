@@ -39,35 +39,41 @@ export const useCanvasInteraction = ({
   }, []);
 
   // Handle mouse down for panning
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    // Pan with left click when move tool is selected
-    if (tool === 'move' && e.button === 0) {
-      e.preventDefault();
-      setIsPanning(true);
-      setPanStart({ x: e.clientX, y: e.clientY });
-      return;
-    }
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      // Pan with left click when move tool is selected
+      if (tool === 'move' && e.button === 0) {
+        e.preventDefault();
+        setIsPanning(true);
+        setPanStart({ x: e.clientX, y: e.clientY });
+        return;
+      }
 
-    // Middle mouse button for panning (always available)
-    if (e.button === 1) {
-      e.preventDefault();
-      setIsPanning(true);
-      setPanStart({ x: e.clientX, y: e.clientY });
-    }
-  }, [tool]);
+      // Middle mouse button for panning (always available)
+      if (e.button === 1) {
+        e.preventDefault();
+        setIsPanning(true);
+        setPanStart({ x: e.clientX, y: e.clientY });
+      }
+    },
+    [tool]
+  );
 
   // Handle mouse move for panning
-  const handleMouseMoveForPanning = useCallback((e: React.MouseEvent) => {
-    if (isPanning) {
-      const deltaX = e.clientX - panStart.x;
-      const deltaY = e.clientY - panStart.y;
+  const handleMouseMoveForPanning = useCallback(
+    (e: React.MouseEvent) => {
+      if (isPanning) {
+        const deltaX = e.clientX - panStart.x;
+        const deltaY = e.clientY - panStart.y;
 
-      setPanX(prev => prev + deltaX);
-      setPanY(prev => prev + deltaY);
+        setPanX(prev => prev + deltaX);
+        setPanY(prev => prev + deltaY);
 
-      setPanStart({ x: e.clientX, y: e.clientY });
-    }
-  }, [isPanning, panStart]);
+        setPanStart({ x: e.clientX, y: e.clientY });
+      }
+    },
+    [isPanning, panStart]
+  );
 
   // Handle mouse up for ending pan
   const handleMouseUpForPanning = useCallback(() => {
@@ -100,71 +106,82 @@ export const useCanvasInteraction = ({
   }, [isPanning, tool]);
 
   // Handle keyboard shortcuts for zoom, pan, and delete
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    // Delete selected element when Delete or Backspace is pressed
-    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElement) {
-      // Don't trigger if user is typing in an input/textarea
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement ||
-        (e.target as HTMLElement)?.isContentEditable
-      ) {
-        return;
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      // Delete selected element when Delete or Backspace is pressed
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElement) {
+        // Don't trigger if user is typing in an input/textarea
+        if (
+          e.target instanceof HTMLInputElement ||
+          e.target instanceof HTMLTextAreaElement ||
+          (e.target as HTMLElement)?.isContentEditable
+        ) {
+          return;
+        }
+
+        e.preventDefault();
+        deleteElement(selectedElement);
       }
 
-      e.preventDefault();
-      deleteElement(selectedElement);
-    }
-
-    // Escape to deselect
-    if (e.key === 'Escape') {
-      setSelectedElement(null);
-      setEditingElement(null);
-    }
-
-    // Zoom shortcuts
-    if (e.ctrlKey || e.metaKey) {
-      if (e.key === '=' || e.key === '+') {
-        e.preventDefault();
-        zoomIn();
-      } else if (e.key === '-') {
-        e.preventDefault();
-        zoomOut();
-      } else if (e.key === '0') {
-        e.preventDefault();
-        resetView();
+      // Escape to deselect
+      if (e.key === 'Escape') {
+        setSelectedElement(null);
+        setEditingElement(null);
       }
-    }
 
-    // Pan with arrow keys
-    if (
-      e.key === 'ArrowUp' ||
-      e.key === 'ArrowDown' ||
-      e.key === 'ArrowLeft' ||
-      e.key === 'ArrowRight'
-    ) {
-      if (!selectedElement) {
-        // Only pan if no element is selected
-        e.preventDefault();
-        const panAmount = e.shiftKey ? 200 : 100; // Faster panning with Shift
-
-        switch (e.key) {
-          case 'ArrowUp':
-            setPanY(prev => prev + panAmount);
-            break;
-          case 'ArrowDown':
-            setPanY(prev => prev - panAmount);
-            break;
-          case 'ArrowLeft':
-            setPanX(prev => prev + panAmount);
-            break;
-          case 'ArrowRight':
-            setPanX(prev => prev - panAmount);
-            break;
+      // Zoom shortcuts
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          zoomIn();
+        } else if (e.key === '-') {
+          e.preventDefault();
+          zoomOut();
+        } else if (e.key === '0') {
+          e.preventDefault();
+          resetView();
         }
       }
-    }
-  }, [selectedElement, setSelectedElement, setEditingElement, deleteElement, zoomIn, zoomOut, resetView]);
+
+      // Pan with arrow keys
+      if (
+        e.key === 'ArrowUp' ||
+        e.key === 'ArrowDown' ||
+        e.key === 'ArrowLeft' ||
+        e.key === 'ArrowRight'
+      ) {
+        if (!selectedElement) {
+          // Only pan if no element is selected
+          e.preventDefault();
+          const panAmount = e.shiftKey ? 200 : 100; // Faster panning with Shift
+
+          switch (e.key) {
+            case 'ArrowUp':
+              setPanY(prev => prev + panAmount);
+              break;
+            case 'ArrowDown':
+              setPanY(prev => prev - panAmount);
+              break;
+            case 'ArrowLeft':
+              setPanX(prev => prev + panAmount);
+              break;
+            case 'ArrowRight':
+              setPanX(prev => prev - panAmount);
+              break;
+          }
+        }
+      }
+    },
+    [
+      selectedElement,
+      setSelectedElement,
+      setEditingElement,
+      deleteElement,
+      zoomIn,
+      zoomOut,
+      resetView,
+    ]
+  );
 
   // Register keyboard event listener
   useEffect(() => {
@@ -176,20 +193,26 @@ export const useCanvasInteraction = ({
   }, [handleKeyDown]);
 
   // Handle canvas click for selection/deselection
-  const handleCanvasClick = useCallback((tool: string) => {
-    if (tool === 'select') {
-      setSelectedElement(null);
-    }
-    // For other tools, the click will be handled in the parent component
-  }, [setSelectedElement]);
+  const handleCanvasClick = useCallback(
+    (tool: string) => {
+      if (tool === 'select') {
+        setSelectedElement(null);
+      }
+      // For other tools, the click will be handled in the parent component
+    },
+    [setSelectedElement]
+  );
 
   // Handle element click for selection
-  const handleElementClick = useCallback((elementId: string, tool: string) => {
-    if (tool === 'select') {
-      setSelectedElement(elementId);
-    }
-    // For other tools (like vote), the action will be handled by other hooks
-  }, [setSelectedElement]);
+  const handleElementClick = useCallback(
+    (elementId: string, tool: string) => {
+      if (tool === 'select') {
+        setSelectedElement(elementId);
+      }
+      // For other tools (like vote), the action will be handled by other hooks
+    },
+    [setSelectedElement]
+  );
 
   return {
     // Viewport state
@@ -198,28 +221,28 @@ export const useCanvasInteraction = ({
     panY,
     isPanning,
     panStart,
-    
+
     // Viewport state setters
     setScale,
     setPanX,
     setPanY,
     setIsPanning,
     setPanStart,
-    
+
     // Mouse event handlers
     handleWheel,
     handleMouseDown,
     handleMouseMoveForPanning,
     handleMouseUpForPanning,
-    
+
     // Click event handlers
     handleCanvasClick,
     handleElementClick,
-    
+
     // Utility functions
     resetView,
     zoomIn,
     zoomOut,
     getCursorStyle,
   };
-}; 
+};

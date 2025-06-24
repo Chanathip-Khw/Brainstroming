@@ -31,7 +31,9 @@ export const TextElementRenderer: React.FC<TextElementRendererProps> = ({
   return (
     <div
       className={`absolute cursor-pointer select-none text-gray-800 ${
-        isSelected ? 'ring-2 ring-indigo-500 bg-white bg-opacity-20 rounded' : ''
+        isSelected
+          ? 'ring-2 ring-indigo-500 bg-white bg-opacity-20 rounded'
+          : ''
       }`}
       style={{
         left: `${element.positionX}px`,
@@ -95,4 +97,4 @@ export const TextElementRenderer: React.FC<TextElementRendererProps> = ({
       {renderResizeHandles(element)}
     </div>
   );
-}; 
+};
