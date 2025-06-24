@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Download, Settings, Zap } from 'lucide-react';
 import Link from 'next/link';
-import { CanvasBoard } from '../../components/canvas/CanvasBoard';
+import { CanvasBoardWrapper } from './CanvasBoardWrapper';
 import { BoardSettingsModal } from '../../components/boards/BoardSettingsModal';
 import { BoardSettings, User } from '../../types';
 import { useCollaboration } from '../../hooks/useCollaboration';
@@ -235,7 +235,7 @@ export default function BoardPage({
         </div>
       </header>
 
-      <CanvasBoard user={user} projectId={resolvedParams.id} />
+      <CanvasBoardWrapper user={user} projectId={resolvedParams.id} />
 
       <BoardSettingsModal
         isOpen={showBoardSettings}

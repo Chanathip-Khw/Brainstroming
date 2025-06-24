@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from 'react';
-import { fetchApi } from '../lib/api';
+import { useState, useCallback } from 'react';
+import { useProjectElementsQuery } from './useApiQueries';
 
 interface CanvasElement {
   id: string;
@@ -38,57 +38,26 @@ interface UseElementDataProps {
 }
 
 export const useElementData = ({ projectId }: UseElementDataProps) => {
-  const [elements, setElements] = useState<CanvasElement[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use React Query for data fetching with caching and background updates
+  const { data: elements = [], isLoading: loading, refetch: fetchElements } = useProjectElementsQuery(projectId);
+  
+  // Local state for optimistic updates during real-time collaboration
+  const [localElements, setLocalElements] = useState<CanvasElement[]>([]);
 
-  // Fetch elements from backend
-  const fetchElements = useCallback(async () => {
-    if (!projectId) return;
-
-    try {
-      const data = await fetchApi(`/api/projects/${projectId}/elements`);
-
-      if (data.success) {
-        console.log('Raw elements data from backend:', data.elements);
-        // Convert decimal positions to numbers
-        const processedElements = data.elements.map((element: any) => ({
-          ...element,
-          positionX:
-            typeof element.positionX === 'string'
-              ? parseFloat(element.positionX)
-              : Number(element.positionX),
-          positionY:
-            typeof element.positionY === 'string'
-              ? parseFloat(element.positionY)
-              : Number(element.positionY),
-          width:
-            typeof element.width === 'string'
-              ? parseFloat(element.width)
-              : Number(element.width),
-          height:
-            typeof element.height === 'string'
-              ? parseFloat(element.height)
-              : Number(element.height),
-        }));
-        setElements(processedElements);
-        console.log('Loaded elements with votes data:', processedElements);
-      } else {
-        console.error('Failed to fetch elements:', data.error);
-      }
-    } catch (error) {
-      console.error('Error fetching elements:', error);
-    } finally {
-      setLoading(false);
+  // Sync React Query data with local state
+  const setElements = useCallback((elementsOrUpdater: CanvasElement[] | ((prev: CanvasElement[]) => CanvasElement[])) => {
+    if (typeof elementsOrUpdater === 'function') {
+      setLocalElements(elementsOrUpdater(elements));
+    } else {
+      setLocalElements(elementsOrUpdater);
     }
-  }, [projectId]);
+  }, [elements]);
 
-  // Load elements on mount
-  useEffect(() => {
-    fetchElements();
-  }, [fetchElements]);
+  // Use local elements if available, otherwise use React Query data
+  const currentElements = localElements.length > 0 ? localElements : elements;
 
   return {
-    elements,
+    elements: currentElements,
     setElements,
     loading,
     fetchElements,
