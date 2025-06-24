@@ -211,6 +211,9 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   });
 
   const handleCanvasClick = (e: React.MouseEvent) => {
+    // Only handle left mouse button clicks (button 0) for canvas interactions
+    if (e.button !== 0) return;
+    
     // Use hook for basic interaction logic (selection/deselection)
     handleCanvasClickFromHook(tool);
 
@@ -247,6 +250,9 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   };
 
   const handleElementClick = (elementId: string, e: React.MouseEvent) => {
+    // Only handle left mouse button clicks (button 0)
+    if (e.button !== 0) return;
+    
     e.stopPropagation();
 
     // Use hook for basic interaction logic (selection)
@@ -263,6 +269,9 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   };
 
   const handleElementDoubleClick = (elementId: string, e: React.MouseEvent) => {
+    // Only handle left mouse button double-clicks (button 0)
+    if (e.button !== 0) return;
+    
     e.stopPropagation();
     const element = elements.find((el: CanvasElement) => el.id === elementId);
     if (element) {
@@ -290,6 +299,9 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
   };
 
   const handleElementMouseDown = (elementId: string, e: React.MouseEvent) => {
+    // Only handle left mouse button presses (button 0)
+    if (e.button !== 0) return;
+    
     setSelectedElement(elementId);
     handleElementMouseDownHook(elementId, e, tool);
   };
