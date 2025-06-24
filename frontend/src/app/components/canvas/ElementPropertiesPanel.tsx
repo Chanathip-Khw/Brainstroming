@@ -55,19 +55,24 @@ export const ElementPropertiesPanel: React.FC<ElementPropertiesPanelProps> = ({
           </button>
         )}
 
-        {element.type === 'GROUP' && (
-          <ColorPicker
-            colors={colors}
-            selectedColor={element.styleData?.color || '#6b7280'}
-            onColorSelect={color =>
-              onUpdateElement(selectedElement, {
-                styleData: { ...element.styleData, color },
-              })
-            }
-            title='Group Color'
-            size='small'
-          />
-        )}
+        {/* Color picker for all element types */}
+        <ColorPicker
+          colors={colors}
+          selectedColor={element.styleData?.color || '#6b7280'}
+          onColorSelect={color =>
+            onUpdateElement(selectedElement, {
+              styleData: { ...element.styleData, color },
+            })
+          }
+          title={
+            element.type === 'GROUP' ? 'Group Color' :
+            element.type === 'STICKY_NOTE' ? 'Note Color' :
+            element.type === 'TEXT' ? 'Text Color' :
+            element.type === 'SHAPE' ? 'Shape Color' :
+            'Element Color'
+          }
+          size='small'
+        />
 
         {element.type === 'GROUP' && (
           <div className='p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm'>
