@@ -19,7 +19,15 @@ const processElementData = (element: any): CanvasElement => ({
 export const useCollaborationCallbacks = ({ setElements }: UseCollaborationCallbacksProps) => {
   const onElementCreated = useCallback((element: any) => {
     const processedElement = processElementData(element);
-    setElements(prev => [...prev, processedElement]);
+    setElements(prev => {
+      // 🔧 DUPLICATE FIX: Check if element already exists to prevent duplicate keys
+      const elementExists = prev.some(el => el.id === processedElement.id);
+      if (elementExists) {
+        console.log('Element already exists, skipping duplicate:', processedElement.id);
+        return prev; // No change if element already exists
+      }
+      return [...prev, processedElement];
+    });
   }, [setElements]);
 
   const onElementUpdated = useCallback((element: any) => {

@@ -64,7 +64,17 @@ export const useElementData = ({ projectId }: UseElementDataProps) => {
       if (elements.length > 0) {
         console.log('📍 First element position from React Query:', elements[0] ? `${elements[0].positionX},${elements[0].positionY}` : 'none');
       }
-      setLocalElements(elements);
+      
+      // 🔧 DUPLICATE PREVENTION: Ensure no duplicates in initial sync
+      const uniqueElements = elements.filter((element: CanvasElement, index: number, array: CanvasElement[]) => 
+        array.findIndex((el: CanvasElement) => el.id === element.id) === index
+      );
+      
+      if (uniqueElements.length !== elements.length) {
+        console.warn('🚨 Duplicates in React Query initial data, removed:', elements.length - uniqueElements.length);
+      }
+      
+      setLocalElements(uniqueElements);
       setIsInitialized(true);
     } else if (isInitialized && elements.length > 0) {
       // 🔧 FIX: Merge React Query updates while preserving local vote state
@@ -105,8 +115,19 @@ export const useElementData = ({ projectId }: UseElementDataProps) => {
         const newElements = elementsOrUpdater(currentElements);
         console.log('✨ New elements after update:', newElements.length, 'elements');
         
+        // 🔧 DUPLICATE PREVENTION: Remove any duplicate elements by ID
+        const uniqueElements = newElements.filter((element: CanvasElement, index: number, array: CanvasElement[]) => 
+          array.findIndex((el: CanvasElement) => el.id === element.id) === index
+        );
+        
+        if (uniqueElements.length !== newElements.length) {
+          console.warn('🚨 Duplicate elements detected and removed:', newElements.length - uniqueElements.length);
+          // 🔧 DEBUG: Check for state mismatches when duplicates are found
+          setTimeout(() => detectStateMismatch(), 100);
+        }
+        
         // Log specific element positions if we're updating positions
-        const positionChanges = newElements.filter((newEl, i) => {
+        const positionChanges = uniqueElements.filter((newEl, i) => {
           const oldEl = currentElements[i];
           return oldEl && (oldEl.positionX !== newEl.positionX || oldEl.positionY !== newEl.positionY);
         });
@@ -121,22 +142,59 @@ export const useElementData = ({ projectId }: UseElementDataProps) => {
           }));
         }
         
-        return newElements;
+        return uniqueElements;
       });
     } else {
       console.log('📝 Direct array update with', elementsOrUpdater.length, 'elements');
-      setLocalElements(elementsOrUpdater);
+      
+      // 🔧 DUPLICATE PREVENTION: Remove any duplicate elements by ID
+      const uniqueElements = elementsOrUpdater.filter((element: CanvasElement, index: number, array: CanvasElement[]) => 
+        array.findIndex((el: CanvasElement) => el.id === element.id) === index
+      );
+      
+      if (uniqueElements.length !== elementsOrUpdater.length) {
+        console.warn('🚨 Duplicate elements detected and removed:', elementsOrUpdater.length - uniqueElements.length);
+        // 🔧 DEBUG: Check for state mismatches when duplicates are found
+        setTimeout(() => detectStateMismatch(), 100);
+      }
+      
+      setLocalElements(uniqueElements);
     }
   }, [elements, localElements]);
 
   // Use local elements if available, otherwise use React Query data
   const currentElements = localElements.length > 0 ? localElements : elements;
 
+  // 🔧 DEBUG: Add state mismatch detection
+  const detectStateMismatch = useCallback(() => {
+    if (localElements.length > 0 && elements.length > 0) {
+      const localIds = new Set(localElements.map((el: CanvasElement) => el.id));
+      const serverIds = new Set(elements.map((el: CanvasElement) => el.id));
+      
+      const phantomElements = localElements.filter((el: CanvasElement) => !serverIds.has(el.id));
+      const missingElements = elements.filter((el: CanvasElement) => !localIds.has(el.id));
+      
+      if (phantomElements.length > 0) {
+        console.warn('👻 Phantom elements detected (exist in frontend but not backend):', 
+          phantomElements.map((el: CanvasElement) => ({ id: el.id, type: el.type })));
+      }
+      
+      if (missingElements.length > 0) {
+        console.warn('❓ Missing elements detected (exist in backend but not frontend):', 
+          missingElements.map((el: CanvasElement) => ({ id: el.id, type: el.type })));
+      }
+      
+      return { phantomElements, missingElements };
+    }
+    return { phantomElements: [], missingElements: [] };
+  }, [localElements, elements]);
+
   return {
     elements: currentElements,
     setElements,
     loading,
     fetchElements,
+    detectStateMismatch, // 🔧 Expose for debugging
   };
 };
 

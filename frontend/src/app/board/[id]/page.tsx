@@ -106,26 +106,26 @@ export default function BoardPage({
 
   // Helper function to determine if a member is considered active
   const isMemberActive = (member: any) => {
-    console.log('Checking member active status:', {
-      memberId: member.id,
-      memberName: member.name,
-      isInCollaboration: member.isInCollaboration,
-      isInCollaborationType: typeof member.isInCollaboration,
-    });
+    // console.log('Checking member active status:', {
+    //   memberId: member.id,
+    //   memberName: member.name,
+    //   isInCollaboration: member.isInCollaboration,
+    //   isInCollaborationType: typeof member.isInCollaboration,
+    // });
 
     // Real-time collaboration status takes absolute priority
     // If they're in collaboration, they're definitely active
-    if (member.isInCollaboration) {
-      console.log(`Member ${member.name} is ACTIVE (in collaboration)`);
-      return true;
-    }
+    // if (member.isInCollaboration) {
+    //   console.log(`Member ${member.name} is ACTIVE (in collaboration)`);
+    //   return true;
+    // }
 
     // If they're NOT in collaboration, they're considered inactive
     // (This ensures real-time accuracy over session-based fallbacks)
-    if (member.isInCollaboration === false) {
-      console.log(`Member ${member.name} is INACTIVE (not in collaboration)`);
-      return false;
-    }
+    // if (member.isInCollaboration === false) {
+    //   console.log(`Member ${member.name} is INACTIVE (not in collaboration)`);
+    //   return false;
+    // }
 
     // Fallback logic only applies if collaboration status is undefined
     // (for cases where collaboration data hasn't loaded yet)
