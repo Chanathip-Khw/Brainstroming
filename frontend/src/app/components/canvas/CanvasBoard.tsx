@@ -255,17 +255,18 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     
     e.stopPropagation();
 
-    // Use hook for basic interaction logic (selection)
-    handleElementClickFromHook(elementId, tool);
-
-    // Handle voting separately as it's not part of basic interaction
+    // Handle voting separately - don't select element when voting
     if (tool === 'vote') {
       const element = elements.find((el: CanvasElement) => el.id === elementId);
       // Only allow voting on sticky notes
       if (element?.type === 'STICKY_NOTE') {
         handleElementVoteHook(elementId, e);
       }
+      return; // Exit early to prevent selection
     }
+
+    // Use hook for basic interaction logic (selection) for all other tools
+    handleElementClickFromHook(elementId, tool);
   };
 
   const handleElementDoubleClick = (elementId: string, e: React.MouseEvent) => {
@@ -302,7 +303,10 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     // Only handle left mouse button presses (button 0)
     if (e.button !== 0) return;
     
-    setSelectedElement(elementId);
+    // Don't select element when using vote tool
+    if (tool !== 'vote') {
+      setSelectedElement(elementId);
+    }
     handleElementMouseDownHook(elementId, e, tool);
   };
 
