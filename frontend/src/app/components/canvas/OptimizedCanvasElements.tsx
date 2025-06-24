@@ -44,6 +44,15 @@ const MemoizedElementRenderer = React.memo<{
   hasUserVoted: (element: CanvasElement) => boolean;
   getElementColor: (element: CanvasElement) => string;
   getPlaceholderColor: (element: CanvasElement) => string;
+  getElementsInGroup: (groupId: string) => CanvasElement[];
+  getGroupVoteCount: (groupId: string) => number;
+  getGroupColor: (element: CanvasElement) => {
+    border: string;
+    bg: string;
+    selectedBorder: string;
+    selectedBg: string;
+    label: string;
+  };
   renderResizeHandles: (element: CanvasElement) => React.ReactNode;
   onElementClick: (elementId: string, e: React.MouseEvent) => void;
   onElementDoubleClick: (elementId: string, e: React.MouseEvent) => void;
@@ -59,6 +68,9 @@ const MemoizedElementRenderer = React.memo<{
   hasUserVoted,
   getElementColor,
   getPlaceholderColor,
+  getElementsInGroup,
+  getGroupVoteCount,
+  getGroupColor,
   renderResizeHandles,
   onElementClick,
   onElementDoubleClick,
@@ -115,29 +127,22 @@ const MemoizedElementRenderer = React.memo<{
         />
       );
     case 'GROUP':
-      // For now, use a simplified div for groups until we can properly integrate all required props
       return (
-        <div
-          key={element.id}
-          className={`absolute cursor-pointer select-none border-2 border-dashed border-gray-400 bg-gray-50 ${
-            isSelected ? 'ring-2 ring-indigo-500' : ''
-          }`}
-          style={{
-            left: `${element.positionX}px`,
-            top: `${element.positionY}px`,
-            width: `${element.width}px`,
-            height: `${element.height}px`,
-            transform: 'translate(-50%, -50%)',
-          }}
-          onClick={e => onElementClick(element.id, e)}
-          onDoubleClick={e => onElementDoubleClick(element.id, e)}
-          onMouseDown={e => onElementMouseDown(element.id, e)}
-        >
-          <div className="absolute -top-6 left-0 px-2 py-1 rounded text-xs font-medium bg-gray-600 text-white">
-            {element.content || 'Group'}
-          </div>
-          {renderResizeHandles(element)}
-        </div>
+        <GroupRenderer
+          element={element}
+          isSelected={isSelected}
+          isEditing={isEditing}
+          editingText={editingText}
+          getElementsInGroup={getElementsInGroup}
+          getGroupVoteCount={getGroupVoteCount}
+          getGroupColor={getGroupColor}
+          renderResizeHandles={renderResizeHandles}
+          onElementClick={onElementClick}
+          onElementDoubleClick={onElementDoubleClick}
+          onElementMouseDown={onElementMouseDown}
+          onEditingTextChange={onEditingTextChange}
+          onTextSubmit={onTextSubmit}
+        />
       );
     default:
       return null;
@@ -164,6 +169,14 @@ const MemoizedElementRenderer = React.memo<{
     prevProps.isEditing !== nextProps.isEditing ||
     prevProps.editingText !== nextProps.editingText ||
     prevProps.tool !== nextProps.tool;
+  
+  // 🔧 FIX: For GROUP elements, also check if any elements in the canvas changed
+  // This ensures group counts update when sticky notes move or get voted on
+  if (element.type === 'GROUP') {
+    // Force re-render for groups - group counts depend on other elements
+    // This is a small performance trade-off for correct group counting
+    return false; // Always re-render groups
+  }
     
   return !elementChanged && !propsChanged;
 });
@@ -242,6 +255,9 @@ export const OptimizedCanvasElements = React.memo<OptimizedCanvasElementsProps>(
           hasUserVoted={hasUserVoted}
           getElementColor={getElementColor}
           getPlaceholderColor={getPlaceholderColor}
+          getElementsInGroup={getElementsInGroup}
+          getGroupVoteCount={getGroupVoteCount}
+          getGroupColor={getGroupColor}
           renderResizeHandles={renderResizeHandles}
           onElementClick={onElementClick}
           onElementDoubleClick={onElementDoubleClick}

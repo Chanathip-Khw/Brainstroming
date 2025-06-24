@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { fetchApi } from '../lib/api';
 import type { CanvasElement } from './useElementData';
 
@@ -17,6 +18,7 @@ export const useElementCRUD = ({
   setElements,
   collaboration,
 }: UseElementCRUDProps) => {
+  const queryClient = useQueryClient();
   // Create element with optimistic updates
   const createElement = useCallback(
     async (elementData: Partial<CanvasElement>) => {
@@ -87,6 +89,11 @@ export const useElementCRUD = ({
 
           // Emit real-time event
           collaboration.emitElementCreated(processedElement);
+          
+          // Invalidate React Query cache
+          queryClient.invalidateQueries({ 
+            queryKey: ['projectElements', projectId] 
+          });
         } else {
           console.error('Failed to create element:', data.error);
           // Remove optimistic element on failure
@@ -98,7 +105,7 @@ export const useElementCRUD = ({
         setElements(prev => prev.filter(el => el.id !== tempId));
       }
     },
-    [projectId, userId, setElements, collaboration]
+    [projectId, userId, setElements, collaboration, queryClient]
   );
 
   // Update element with optimistic updates
@@ -116,6 +123,9 @@ export const useElementCRUD = ({
       );
 
       try {
+        console.log('🔄 Updating element:', elementId, 'with data:', updateData);
+        console.log('🌐 API URL:', `/api/projects/${projectId}/elements/${elementId}`);
+        
         const data = await fetchApi(
           `/api/projects/${projectId}/elements/${elementId}`,
           {
@@ -124,54 +134,36 @@ export const useElementCRUD = ({
           }
         );
 
-        if (data.success) {
-          // Sync with backend response (in case backend modified the data)
-          const processedElement = {
-            ...data.element,
-            positionX:
-              typeof data.element.positionX === 'string'
-                ? parseFloat(data.element.positionX)
-                : Number(data.element.positionX),
-            positionY:
-              typeof data.element.positionY === 'string'
-                ? parseFloat(data.element.positionY)
-                : Number(data.element.positionY),
-            width:
-              typeof data.element.width === 'string'
-                ? parseFloat(data.element.width)
-                : Number(data.element.width),
-            height:
-              typeof data.element.height === 'string'
-                ? parseFloat(data.element.height)
-                : Number(data.element.height),
-          };
-          setElements(prev =>
-            prev.map(el =>
-              el.id === elementId ? { ...el, ...processedElement } : el
-            )
-          );
+        console.log('📡 Backend response:', data);
 
-          // Emit real-time event
-          collaboration.emitElementUpdated({
-            ...currentElement,
-            ...processedElement,
+        if (data.success) {
+          console.log('✅ Update successful, emitting to collaborators');
+          // Only emit real-time event for other users - don't update local state again
+          // The optimistic update is already applied and working correctly
+          collaboration.emitElementUpdated(data.element);
+          
+          // 🔄 CRITICAL FIX: Invalidate React Query cache so refresh shows correct data
+          queryClient.invalidateQueries({ 
+            queryKey: ['projectElements', projectId] 
           });
         } else {
-          console.error('Failed to update element:', data.error);
+          console.error('❌ Failed to update element:', data.error);
+          console.error('📊 Full error response:', data);
           // Rollback on failure
           setElements(prev =>
             prev.map(el => (el.id === elementId ? currentElement : el))
           );
         }
       } catch (error) {
-        console.error('Error updating element:', error);
+        console.error('💥 Error updating element:', error);
+        console.error('🔍 Error details:', error instanceof Error ? error.message : String(error));
         // Rollback on error
         setElements(prev =>
           prev.map(el => (el.id === elementId ? currentElement : el))
         );
       }
     },
-    [projectId, elements, setElements, collaboration]
+    [projectId, elements, setElements, collaboration, queryClient]
   );
 
   // Delete element with optimistic updates
@@ -201,6 +193,11 @@ export const useElementCRUD = ({
         } else {
           // Emit real-time event
           collaboration.emitElementDeleted(elementId);
+          
+          // Invalidate React Query cache
+          queryClient.invalidateQueries({ 
+            queryKey: ['projectElements', projectId] 
+          });
         }
         // If successful, element is already removed from UI
       } catch (error) {
@@ -209,7 +206,7 @@ export const useElementCRUD = ({
         setElements(prev => [...prev, elementToDelete]);
       }
     },
-    [projectId, elements, setElements, collaboration]
+    [projectId, elements, setElements, collaboration, queryClient]
   );
 
   return {

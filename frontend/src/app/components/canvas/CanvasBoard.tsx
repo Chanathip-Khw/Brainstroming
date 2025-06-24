@@ -10,11 +10,7 @@ import { useElementDragging } from '../../hooks/useElementDragging';
 import { useElementResizing } from '../../hooks/useElementResizing';
 import { useCanvasInteraction } from '../../hooks/useCanvasInteraction';
 import { useSessionManagement } from '../../hooks/useSessionManagement';
-import { StickyNoteRenderer } from './StickyNoteRenderer';
-import { TextElementRenderer } from './TextElementRenderer';
-import { ShapeRenderer } from './ShapeRenderer';
-import { GroupRenderer } from './GroupRenderer';
-import { ElementRenderer } from './ElementRenderer';
+import { OptimizedCanvasElements } from './OptimizedCanvasElements';
 import { ZoomControls } from './ZoomControls';
 import { HelpTooltip } from './HelpTooltip';
 import { ColorPicker } from './ColorPicker';
@@ -164,7 +160,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
   // Add element to group
   const addElementToGroup = async (elementId: string, groupId: string) => {
-    const element = elements.find(el => el.id === elementId);
+    const element = elements.find((el: CanvasElement) => el.id === elementId);
     if (!element) return;
 
     const updatedStyleData = createGroupStyleData(element, groupId);
@@ -173,7 +169,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
   // Remove element from group
   const removeElementFromGroup = async (elementId: string) => {
-    const element = elements.find(el => el.id === elementId);
+    const element = elements.find((el: CanvasElement) => el.id === elementId);
     if (!element) return;
 
     const updatedStyleData = removeGroupStyleData(element);
@@ -245,7 +241,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
     // Handle voting separately as it's not part of basic interaction
     if (tool === 'vote') {
-      const element = elements.find(el => el.id === elementId);
+      const element = elements.find((el: CanvasElement) => el.id === elementId);
       // Only allow voting on sticky notes
       if (element?.type === 'STICKY_NOTE') {
         handleElementVoteHook(elementId, e);
@@ -255,7 +251,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
   const handleElementDoubleClick = (elementId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const element = elements.find(el => el.id === elementId);
+    const element = elements.find((el: CanvasElement) => el.id === elementId);
     if (element) {
       setEditingElement(elementId);
       setEditingText(element.content || '');
@@ -454,117 +450,32 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
             }}
           />
 
-          {elements
-            .sort((a, b) => {
-              // Groups should render first (behind other elements)
-              if (a.type === 'GROUP' && b.type !== 'GROUP') return -1;
-              if (b.type === 'GROUP' && a.type !== 'GROUP') return 1;
-              return 0;
-            })
-            .map(element => {
-              // Handle sticky notes with dedicated component
-              if (element.type === 'STICKY_NOTE') {
-                return (
-                  <StickyNoteRenderer
-                    key={element.id}
-                    element={element}
-                    isSelected={selectedElement === element.id}
-                    isEditing={editingElement === element.id}
-                    editingText={editingText}
-                    tool={tool}
-                    hasUserVoted={hasUserVotedHook}
-                    getElementColor={getElementColor}
-                    getPlaceholderColor={getPlaceholderColor}
-                    renderResizeHandles={renderResizeHandles}
-                    onElementClick={handleElementClick}
-                    onElementDoubleClick={handleElementDoubleClick}
-                    onElementMouseDown={handleElementMouseDown}
-                    onEditingTextChange={setEditingText}
-                    onTextSubmit={handleTextSubmit}
-                  />
-                );
-              }
-
-              // Handle text elements with dedicated component
-              if (element.type === 'TEXT') {
-                return (
-                  <TextElementRenderer
-                    key={element.id}
-                    element={element}
-                    isSelected={selectedElement === element.id}
-                    isEditing={editingElement === element.id}
-                    editingText={editingText}
-                    getPlaceholderColor={getPlaceholderColor}
-                    renderResizeHandles={renderResizeHandles}
-                    onElementClick={handleElementClick}
-                    onElementDoubleClick={handleElementDoubleClick}
-                    onElementMouseDown={handleElementMouseDown}
-                    onEditingTextChange={setEditingText}
-                    onTextSubmit={handleTextSubmit}
-                  />
-                );
-              }
-
-              // Handle group elements with dedicated component
-              if (element.type === 'GROUP') {
-                return (
-                  <GroupRenderer
-                    key={element.id}
-                    element={element}
-                    isSelected={selectedElement === element.id}
-                    isEditing={editingElement === element.id}
-                    editingText={editingText}
-                    getElementsInGroup={(groupId: string) =>
-                      getElementsInGroup(elements, groupId)
-                    }
-                    getGroupVoteCount={(groupId: string) =>
-                      getGroupVoteCount(elements, groupId)
-                    }
-                    getGroupColor={getGroupColor}
-                    renderResizeHandles={renderResizeHandles}
-                    onElementClick={handleElementClick}
-                    onElementDoubleClick={handleElementDoubleClick}
-                    onElementMouseDown={handleElementMouseDown}
-                    onEditingTextChange={setEditingText}
-                    onTextSubmit={handleTextSubmit}
-                  />
-                );
-              }
-
-              // Handle shape elements with dedicated component
-              if (element.type === 'SHAPE') {
-                return (
-                  <ShapeRenderer
-                    key={element.id}
-                    element={element}
-                    isSelected={selectedElement === element.id}
-                    renderResizeHandles={renderResizeHandles}
-                    onElementClick={handleElementClick}
-                    onElementDoubleClick={handleElementDoubleClick}
-                    onElementMouseDown={handleElementMouseDown}
-                  />
-                );
-              }
-
-              // Handle all other element types with the ElementRenderer
-              return (
-                <ElementRenderer
-                  key={element.id}
-                  element={element}
-                  isSelected={selectedElement === element.id}
-                  isEditing={editingElement === element.id}
-                  editingText={editingText}
-                  getElementColor={getElementColor}
-                  getPlaceholderColor={getPlaceholderColor}
-                  renderResizeHandles={renderResizeHandles}
-                  onElementClick={handleElementClick}
-                  onElementDoubleClick={handleElementDoubleClick}
-                  onElementMouseDown={handleElementMouseDown}
-                  onEditingTextChange={setEditingText}
-                  onTextSubmit={handleTextSubmit}
-                />
-              );
-            })}
+          <OptimizedCanvasElements
+            elements={elements}
+            selectedElement={selectedElement}
+            editingElement={editingElement}
+            editingText={editingText}
+            tool={tool}
+            hasUserVoted={hasUserVotedHook}
+            getElementColor={getElementColor}
+            getPlaceholderColor={getPlaceholderColor}
+            getElementsInGroup={(groupId: string) =>
+              getElementsInGroup(elements, groupId)
+            }
+            getGroupVoteCount={(groupId: string) =>
+              getGroupVoteCount(elements, groupId)
+            }
+            getGroupColor={getGroupColor}
+            renderResizeHandles={renderResizeHandles}
+            onElementClick={handleElementClick}
+            onElementDoubleClick={handleElementDoubleClick}
+            onElementMouseDown={handleElementMouseDown}
+            onEditingTextChange={setEditingText}
+            onTextSubmit={handleTextSubmit}
+            scale={scale}
+            panX={panX}
+            panY={panY}
+          />
         </div>
 
         <ZoomControls

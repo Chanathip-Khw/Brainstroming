@@ -23,10 +23,13 @@ export const useCollaborationCallbacks = ({ setElements }: UseCollaborationCallb
   }, [setElements]);
 
   const onElementUpdated = useCallback((element: any) => {
+    console.log('🌐 Collaboration: Element updated received', element.id, `pos: ${element.positionX},${element.positionY}`);
     const processedElement = processElementData(element);
-    setElements(prev =>
-      prev.map(el => (el.id === element.id ? processedElement : el))
-    );
+    setElements(prev => {
+      const result = prev.map(el => (el.id === element.id ? processedElement : el));
+      console.log('🌐 Collaboration: Applied element update', processedElement.id, `new pos: ${processedElement.positionX},${processedElement.positionY}`);
+      return result;
+    });
   }, [setElements]);
 
   const onElementDeleted = useCallback((elementId: string) => {
