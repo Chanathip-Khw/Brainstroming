@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface UseCanvasInteractionProps {
   tool: string;
@@ -22,8 +22,8 @@ export const useCanvasInteraction = ({
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 
-  // Handle mouse wheel zoom
-  const handleWheel = useCallback((e: React.WheelEvent) => {
+  // Handle mouse wheel zoom with native event for proper passive control
+  const handleNativeWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
 
     const zoomFactor = 0.1;
@@ -36,6 +36,40 @@ export const useCanvasInteraction = ({
           : Math.max(0.3, prevScale - zoomFactor);
       return newScale;
     });
+  }, []);
+
+  // Track current element for cleanup
+  const currentElementRef = useRef<HTMLDivElement | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  // Ref callback to attach wheel listener when element is ready
+  const attachWheelListener = useCallback((element: HTMLDivElement | null) => {
+    // Cleanup previous listener if exists
+    if (cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
+    }
+
+    currentElementRef.current = element;
+
+    if (element) {
+      // Add wheel event listener with passive: false to allow preventDefault
+      element.addEventListener('wheel', handleNativeWheel, { passive: false });
+      
+      // Store cleanup function
+      cleanupRef.current = () => {
+        element.removeEventListener('wheel', handleNativeWheel);
+      };
+    }
+  }, [handleNativeWheel]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+      }
+    };
   }, []);
 
   // Handle mouse down for panning
@@ -229,8 +263,10 @@ export const useCanvasInteraction = ({
     setIsPanning,
     setPanStart,
 
+    // Canvas ref callback for wheel events
+    attachWheelListener,
+
     // Mouse event handlers
-    handleWheel,
     handleMouseDown,
     handleMouseMoveForPanning,
     handleMouseUpForPanning,

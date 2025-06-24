@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import { User } from '../../types';
 import { SessionTimer } from '../SessionTimer';
 import { SessionTemplates } from '../SessionTemplates';
@@ -122,7 +122,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     panX,
     panY,
     isPanning,
-    handleWheel: handleWheelHook,
+    attachWheelListener,
     handleMouseDown: handleMouseDownForPanning,
     handleMouseMoveForPanning,
     handleMouseUpForPanning,
@@ -139,6 +139,19 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     setEditingElement,
     deleteElement,
   });
+
+  // Combined ref callback for canvas element
+  const canvasRefCallback = useCallback((element: HTMLDivElement | null) => {
+    // Set the existing ref
+    if (canvasRef.current !== element) {
+      canvasRef.current = element;
+    }
+    
+    // Attach wheel listener
+    if (element) {
+      attachWheelListener(element);
+    }
+  }, [attachWheelListener]);
 
   // Element resizing hook
   const {
@@ -422,13 +435,12 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
       <div className='flex-1 relative overflow-hidden'>
         <div
-          ref={canvasRef}
+          ref={canvasRefCallback}
           className={`w-full h-full relative ${getCursorStyle()}`}
           onClick={handleCanvasClick}
           onMouseDown={handleMouseDownForPanning}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
-          onWheel={handleWheelHook}
           onContextMenu={e => e.preventDefault()} // Prevent right-click menu
           style={{
             transform: `scale(${scale}) translate(${panX}px, ${panY}px)`,
