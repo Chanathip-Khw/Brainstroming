@@ -18,7 +18,7 @@ interface StickyNoteRendererProps {
   onTextSubmit: () => void;
 }
 
-export const StickyNoteRenderer: React.FC<StickyNoteRendererProps> = ({
+const StickyNoteRendererComponent: React.FC<StickyNoteRendererProps> = ({
   element,
   isSelected,
   isEditing,
@@ -98,4 +98,6 @@ export const StickyNoteRenderer: React.FC<StickyNoteRendererProps> = ({
       {renderResizeHandles(element)}
     </div>
   );
-}; 
+};
+
+export const StickyNoteRenderer = React.memo(StickyNoteRendererComponent); 

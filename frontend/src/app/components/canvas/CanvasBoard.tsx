@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import {
   Hand,
@@ -37,6 +37,16 @@ import LiveCursors from '../LiveCursors';
 import { fetchApi } from '../../lib/api';
 import type { CanvasElement } from '../../hooks/useElementData';
 import { CANVAS_COLORS, CANVAS_SHAPES, CANVAS_TOOLS } from '../../constants/canvas';
+import { getElementColor, getPlaceholderColor, getGroupColor } from '../../utils/elementStyles';
+import { 
+  getElementsInGroup, 
+  getGroupVoteCount, 
+  isPointInGroup, 
+  findGroupAtPoint,
+  createGroupStyleData,
+  removeGroupStyleData
+} from '../../utils/groupUtils';
+import { screenToCanvas } from '../../utils/canvasUtils';
 
 interface CanvasBoardProps {
   user: User;
@@ -277,47 +287,12 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     updateElement: updateElementHook,
   });
 
-  // Get elements that belong to a specific group
-  const getElementsInGroup = (groupId: string) => {
-    return elements.filter(el => el.styleData?.groupId === groupId);
-  };
-
-  // Get total vote count for all sticky notes in a group
-  const getGroupVoteCount = (groupId: string) => {
-    const groupElements = getElementsInGroup(groupId);
-    const stickyNotes = groupElements.filter(el => el.type === 'STICKY_NOTE');
-    return stickyNotes.reduce((total, stickyNote) => {
-      return total + (stickyNote._count?.votes || 0);
-    }, 0);
-  };
-
-  // Check if a point is inside a group boundary
-  const isPointInGroup = (x: number, y: number, group: CanvasElement) => {
-    const groupLeft = group.positionX - group.width / 2;
-    const groupRight = group.positionX + group.width / 2;
-    const groupTop = group.positionY - group.height / 2;
-    const groupBottom = group.positionY + group.height / 2;
-
-    return (
-      x >= groupLeft && x <= groupRight && y >= groupTop && y <= groupBottom
-    );
-  };
-
-  // Find which group contains a point (if any)
-  const findGroupAtPoint = (x: number, y: number) => {
-    return elements.find(el => el.type === 'GROUP' && isPointInGroup(x, y, el));
-  };
-
   // Add element to group
   const addElementToGroup = async (elementId: string, groupId: string) => {
     const element = elements.find(el => el.id === elementId);
     if (!element) return;
 
-    const updatedStyleData = {
-      ...element.styleData,
-      groupId: groupId,
-    };
-
+    const updatedStyleData = createGroupStyleData(element, groupId);
     await updateElementHook(elementId, { styleData: updatedStyleData });
   };
 
@@ -326,8 +301,8 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     const element = elements.find(el => el.id === elementId);
     if (!element) return;
 
-    const { groupId, ...restStyleData } = element.styleData;
-    await updateElementHook(elementId, { styleData: restStyleData });
+    const updatedStyleData = removeGroupStyleData(element);
+    await updateElementHook(elementId, { styleData: updatedStyleData });
   };
 
 
@@ -356,7 +331,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
     updateElement: updateElementHook,
     addElementToGroup,
     removeElementFromGroup,
-    findGroupAtPoint,
+    findGroupAtPoint: (x: number, y: number) => findGroupAtPoint(elements, x, y),
   });
 
 
@@ -494,23 +469,6 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
 
 
 
-  const getElementColor = (element: CanvasElement) => {
-    const color = element.styleData?.color || '#fbbf24';
-
-    // Convert hex to Tailwind-like classes or use inline styles
-    const colorMap: { [key: string]: string } = {
-      '#fbbf24': 'bg-yellow-200',
-      '#3b82f6': 'bg-blue-200',
-      '#10b981': 'bg-green-200',
-      '#ec4899': 'bg-pink-200',
-      '#8b5cf6': 'bg-purple-200',
-      '#f97316': 'bg-orange-200',
-      '#ef4444': 'bg-red-200',
-      '#6b7280': 'bg-gray-200',
-    };
-
-    return colorMap[color] || 'bg-yellow-200';
-  };
 
   // Helper function to create placeholder color with opacity
   const getPlaceholderColor = (element: CanvasElement) => {
@@ -695,8 +653,8 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
           }}
           onDeleteElement={deleteElement}
           onUpdateElement={updateElementHook}
-          getElementsInGroup={getElementsInGroup}
-          getGroupVoteCount={getGroupVoteCount}
+          getElementsInGroup={(groupId: string) => getElementsInGroup(elements, groupId)}
+          getGroupVoteCount={(groupId: string) => getGroupVoteCount(elements, groupId)}
         />
       </div>
 
@@ -730,19 +688,22 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
             }}
           />
 
-          {elements
-            .sort((a, b) => {
-              // Groups should render first (behind other elements)
-              if (a.type === 'GROUP' && b.type !== 'GROUP') return -1;
-              if (b.type === 'GROUP' && a.type !== 'GROUP') return 1;
-              return 0;
-            })
-            .map(element => {
+          {useMemo(() => {
+            // Memoize element sorting to prevent re-computation on every render
+            const sortedElements = elements
+              .sort((a, b) => {
+                // Groups should render first (behind other elements)
+                if (a.type === 'GROUP' && b.type !== 'GROUP') return -1;
+                if (b.type === 'GROUP' && a.type !== 'GROUP') return 1;
+                return 0;
+              });
+
+            return sortedElements.map(element => {
               // Handle sticky notes with dedicated component
               if (element.type === 'STICKY_NOTE') {
                 return (
                   <StickyNoteRenderer
-                    key={element.id}
+                key={element.id}
                     element={element}
                     isSelected={selectedElement === element.id}
                     isEditing={editingElement === element.id}
@@ -790,8 +751,8 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                     isSelected={selectedElement === element.id}
                     isEditing={editingElement === element.id}
                     editingText={editingText}
-                    getElementsInGroup={getElementsInGroup}
-                    getGroupVoteCount={getGroupVoteCount}
+                    getElementsInGroup={(groupId: string) => getElementsInGroup(elements, groupId)}
+                    getGroupVoteCount={(groupId: string) => getGroupVoteCount(elements, groupId)}
                     getGroupColor={getGroupColor}
                     renderResizeHandles={renderResizeHandles}
                     onElementClick={handleElementClick}
@@ -837,7 +798,7 @@ export const CanvasBoard = ({ user, projectId }: CanvasBoardProps) => {
                 />
               );
             })}
-        </div>
+                        </div>
 
         <ZoomControls
           scale={scale}
