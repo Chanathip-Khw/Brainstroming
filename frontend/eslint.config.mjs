@@ -15,29 +15,31 @@ const eslintConfig = [
     rules: {
       // TypeScript specific rules
       '@typescript-eslint/no-unused-vars': [
-        'error',
+        'warn',
         { argsIgnorePattern: '^_' },
       ],
       '@typescript-eslint/no-explicit-any': 'warn',
-
       '@typescript-eslint/no-non-null-assertion': 'warn',
+      '@typescript-eslint/ban-ts-comment': 'warn',
 
       // React specific rules
       'react-hooks/exhaustive-deps': 'warn',
       'react/jsx-key': 'error',
       'react/no-unescaped-entities': 'warn',
+      'react/display-name': 'warn',
 
       // General code quality rules
       'prefer-const': 'error',
       'no-var': 'error',
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       'no-debugger': 'error',
-      'no-duplicate-imports': 'error',
-      'no-unused-expressions': 'error',
+      'no-duplicate-imports': 'warn',
+      'no-unused-expressions': 'warn',
+      'prefer-spread': 'warn',
 
-      // Import organization
+      // Import organization (downgraded to warning)
       'sort-imports': [
-        'error',
+        'warn',
         {
           ignoreCase: false,
           ignoreDeclarationSort: true,

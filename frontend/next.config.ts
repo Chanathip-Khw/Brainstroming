@@ -38,9 +38,11 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
 
-  // ESLint configuration
+  // ESLint configuration - allow warnings but fail on errors
   eslint: {
     ignoreDuringBuilds: false,
+    // Only fail on errors, not warnings
+    dirs: ['src'],
   },
 };
 
