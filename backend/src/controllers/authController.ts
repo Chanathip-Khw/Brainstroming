@@ -145,7 +145,7 @@ export const authController = {
           expiresAt: session.expiresAt
         }
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error syncing user:', error);
       return reply.code(500).send({ error: 'Failed to sync user' });
     }
@@ -357,11 +357,11 @@ export const authController = {
         refreshToken: tokenPair.refreshToken,
         expiresIn: tokenPair.expiresIn
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error refreshing token:', error);
       
       // Determine the appropriate error response
-      if (error.message.includes('revoked') || error.message.includes('expired')) {
+      if (error.message && (error.message.includes('revoked') || error.message.includes('expired'))) {
         return reply.code(401).send({ error: 'Invalid refresh token', message: 'Please log in again' });
       }
       

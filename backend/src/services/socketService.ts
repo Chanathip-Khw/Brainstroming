@@ -27,7 +27,7 @@ class SocketService {
   private io: SocketIOServer | null = null;
   private userSockets: Map<string, UserSocket> = new Map();
   private projectRooms: Map<string, Set<string>> = new Map();
-  private authService: AuthService;
+  private authService!: AuthService;
 
   initialize(server: any) {
     this.authService = new AuthService();
@@ -65,7 +65,7 @@ class SocketService {
         console.log('Socket authenticated for user:', user.name);
         socket.data.user = user;
         next();
-      } catch (error) {
+      } catch (error: any) {
         console.error('Socket authentication error:', error);
         next(new Error('Authentication error: ' + error.message));
       }

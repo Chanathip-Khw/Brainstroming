@@ -56,7 +56,7 @@ export async function authenticateToken(request: FastifyRequest, reply: FastifyR
       }
       
       return // Successfully authenticated with backend token
-    } catch (accessTokenError) {
+    } catch (accessTokenError: any) {
       console.log('Backend token verification failed:', accessTokenError.message);
       
       // If access token verification fails, try NextAuth token
@@ -110,7 +110,7 @@ export async function authenticateToken(request: FastifyRequest, reply: FastifyR
         }
         
         return // Successfully authenticated with NextAuth token
-      } catch (nextAuthError) {
+      } catch (nextAuthError: any) {
         console.log('NextAuth token verification failed:', nextAuthError.message);
         // Token verification failed
         return reply.code(401).send({ 
