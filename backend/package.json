@@ -12,6 +12,9 @@
     "author": "",
     "license": "ISC",
     "type": "module",
+    "engines": {
+        "node": ">=20"
+    },
     "dependencies": {
         "@fastify/cors": "^11.0.1",
         "@fastify/jwt": "^9.1.0",
