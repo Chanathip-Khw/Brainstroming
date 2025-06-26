@@ -21,8 +21,12 @@ export function createServer(): FastifyInstance {
 
 export async function registerPlugins(fastify: FastifyInstance): Promise<void> {
   // CORS
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000'
+  // Ensure the frontend URL includes protocol for CORS
+  const corsOrigin = frontendUrl.startsWith('http') ? frontendUrl : `https://${frontendUrl}`
+  
   await fastify.register(cors, {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: corsOrigin,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
   })

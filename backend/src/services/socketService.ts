@@ -32,9 +32,13 @@ class SocketService {
   initialize(server: any) {
     this.authService = new AuthService();
     
+    // Ensure the frontend URL includes protocol for CORS
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000"
+    const corsOrigin = frontendUrl.startsWith('http') ? frontendUrl : `https://${frontendUrl}`
+    
     this.io = new SocketIOServer(server, {
       cors: {
-        origin: process.env.FRONTEND_URL || "http://localhost:3000",
+        origin: corsOrigin,
         methods: ["GET", "POST"],
         credentials: true
       }
